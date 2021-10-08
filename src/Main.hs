@@ -2,7 +2,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GADTs #-}
 
-{-# LANGUAGE TypeOperators #-}
+
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -131,14 +131,17 @@ newtype Single = Hoi Thing
 
 ---------
 
-data InnerRep = Tagged [[InnerRep]] -- outerlist contains sum, inner list contains field
+data InnerRep = Tagged [IProduct] -- outerlist contains sum, inner list contains fields
               | Base Int -- width in integers
               deriving (Show)
+
+newtype IProduct = IProduct [InnerRep]
+                 deriving (Show)
 
 memWidthI :: InnerRep -> Int
 memWidthI a = case a of
                 Tagged xxs -> let amountOfConstructors = length xxs
-                                  maximumInnerWidth    = maximum $ map (sum . map memWidthI) xxs
+                                  maximumInnerWidth    = maximum $ map (sum . (\(IProduct xs) -> map memWidthI xs)) xxs
                               in  maximumInnerWidth + log2 amountOfConstructors
                 Base x    -> x
 
@@ -167,11 +170,44 @@ instance MemRep Int32 where
 instance MemRep Int64 where
   memRep = Base 64
 
+instance (MemRep a, MemRep b) => MemRep (a,b) where
+  memRep = Tagged [IProduct [memRep @ a, memRep @ b]]
+
+
+instance (MemRep a, MemRep b, MemRep c) => MemRep (a,b, c) where
+  memRep = Tagged [IProduct [memRep @ a, memRep @ b, memRep @ c]]
+
 instance MemRep a => MemRep (Maybe a) where
-  memRep = Tagged [[],[memRep @ a]]
+  memRep = Tagged [IProduct [], IProduct [memRep @ a]]
 
 instance (MemRep l, MemRep r) => MemRep (Either l r) where
-  memRep = Tagged [[memRep @ l], [memRep @ r]]
+  memRep = Tagged [IProduct [memRep @ l], IProduct [memRep @ r]]
 
 instance (MemRep a, MemRep b) => MemRep (A a b) where
-  memRep = Tagged [[memRep @ a, memRep @ a, memRep @ a],[memRep @ b, memRep @ b]]
+  memRep = Tagged [IProduct [memRep @ a, memRep @ a, memRep @ a], IProduct [memRep @ b, memRep @ b]]
+
+type Tag = Int
+
+data OuterRep = OuterRep [[Tag]] Sum
+              deriving (Show)
+
+newtype Sum = Sum [Product]
+            deriving (Show)
+
+data Product = Product [Sum]
+             | Singleton Int
+             deriving (Show)
+
+-- in2out :: InnerRep -> OuterRep
+-- in2out (Base x)     = OuterRep [[1]] (Sum [Singleton x])
+-- in2out x@(Tagged xxs) = OuterRep (tags x) undefined
+
+-- tags :: InnerRep -> [[Tag]]
+-- tags (Base x)     = [[1]]
+-- tags (Tagged xss) = [[length xss], tagsr1 xss] ++ tagsrx xss
+
+-- tagsr1 :: [IProduct] -> [Tag]
+-- tagsr1 xxs = map (\(IProduct xs) -> ) xss
+
+-- tagsrx :: [IProduct] -> [[Tag]]
+-- tagsrx = undefined
