@@ -21,6 +21,9 @@ import qualified GHC.Generics as G
 import Data.Kind
 import Data.Array.Accelerate.Representation.Tag
 import GHC.Float
+import Data.Maybe
+import Data.Universe.Helpers (cartesianProduct)
+import Data.List (sortBy, transpose, nub)
 
 -- class SizeOf a where
 --   sizeof :: a -> DataShape
@@ -238,5 +241,58 @@ step :: (Tag, [InnerRep]) -> (Tag, [Tag], [InnerRep])
 step (t, rs) = (t, map (fst . tagsFix) rs, concatMap (snd . tagsFix) rs)
 
 tagsFix :: InnerRep -> (Tag, [InnerRep])
-tagsFix (Base x)               = (1, [])
+tagsFix (Base x)               = (0, [])
 tagsFix (Tagged xss)           = (length xss, concatMap unIP xss)
+
+data Store = Value Int
+           | Tag Int
+           deriving (Show, Eq)
+
+flatten :: InnerRep -> [[Store]]
+flatten (Base x)     = [[Value x]]
+flatten (Tagged xss) = map (\xs -> getTag xss : xs) $ concatMap flatten' xss
+
+flatten' :: IProduct -> [[Store]]
+flatten' (IProduct [])     = [[]]
+flatten' (IProduct (x:xs)) = cartesianProduct (++) (flatten x) (flatten' (IProduct xs))
+
+getTag :: [IProduct] -> Store
+getTag = Tag . length
+
+sortTags :: [[Store]] -> [[Store]]
+sortTags = map $ sortBy tagOrdering
+
+tagOrdering :: Store -> Store -> Ordering
+tagOrdering (Tag _) (Value _) = LT
+tagOrdering (Value _) (Tag _) = GT
+tagOrdering _         _       = EQ
+
+splitTags :: [[Store]] -> [([Store], [Store])]
+splitTags = map splitTags'
+
+splitTags' :: [Store] -> ([Store], [Store])
+splitTags' []           = ([],[])
+splitTags' (Tag x : xs) = case splitTags' xs of
+                           (ys, zs) -> (Tag x:ys, zs)
+splitTags' xs           = ([], xs)
+
+allign :: [([Store], [Store])] -> ([[Store]],[[Store]])
+allign xs = (allign' fst xs, allign' snd xs)
+          where
+            allign' f = map nub . transpose . map f
+
+data Opts = Fst
+          | Snd
+          | Trd
+
+instance MemRep Opts where
+  memRep = Tagged [IProduct [], IProduct [], IProduct []]
+
+instance MemRep Float where
+  memRep = Base 32
+
+allignment :: InnerRep -> ([[Store]],[[Store]])
+allignment = allign . splitTags . sortTags . flatten
+
+sizeOf :: ([[Store]], [[Store]]) -> Int
+sizeOf (ts, ds) = sum (map (maximum . map (\(Tag x) -> log2 x)) ts) + sum (map (maximum . map (\(Value x) -> x)) ds)
