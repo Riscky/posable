@@ -138,6 +138,9 @@ data InnerRep = Tagged [IProduct] -- outerlist contains sum, inner list contains
 newtype IProduct = IProduct [InnerRep]
                  deriving (Show)
 
+unIP :: IProduct -> [InnerRep]
+unIP (IProduct x) = x
+
 memWidthI :: InnerRep -> Int
 memWidthI a = case a of
                 Tagged xxs -> let amountOfConstructors = length xxs
@@ -173,7 +176,6 @@ instance MemRep Int64 where
 instance (MemRep a, MemRep b) => MemRep (a,b) where
   memRep = Tagged [IProduct [memRep @ a, memRep @ b]]
 
-
 instance (MemRep a, MemRep b, MemRep c) => MemRep (a,b, c) where
   memRep = Tagged [IProduct [memRep @ a, memRep @ b, memRep @ c]]
 
@@ -182,6 +184,9 @@ instance MemRep a => MemRep (Maybe a) where
 
 instance (MemRep l, MemRep r) => MemRep (Either l r) where
   memRep = Tagged [IProduct [memRep @ l], IProduct [memRep @ r]]
+
+instance MemRep Bool where
+  memRep = Tagged [IProduct [], IProduct []]
 
 instance (MemRep a, MemRep b) => MemRep (A a b) where
   memRep = Tagged [IProduct [memRep @ a, memRep @ a, memRep @ a], IProduct [memRep @ b, memRep @ b]]
@@ -206,8 +211,32 @@ data Product = Product [Sum]
 -- tags (Base x)     = [[1]]
 -- tags (Tagged xss) = [[length xss], tagsr1 xss] ++ tagsrx xss
 
--- tagsr1 :: [IProduct] -> [Tag]
--- tagsr1 xxs = map (\(IProduct xs) -> ) xss
+-- tagsR :: InnerRep -> [[Tag]]
+-- tagsR x = case step $ tagsFix x of
+--             (t, ts, irs) -> [[t],ts] ++ concatMap tagsR irs
 
--- tagsrx :: [IProduct] -> [[Tag]]
--- tagsrx = undefined
+-- stepR :: InnerRep -> [[Tag]]
+-- stepR ir = [[fst $ tagsFix ir]] ++ map (concat . stepR) (snd $ tagsFix ir)
+
+tags :: InnerRep -> [[Tag]]
+tags = runStepR . prepareStepR
+
+runStepR :: ([[Tag]], [InnerRep]) -> [[Tag]]
+runStepR (ts, []) = ts
+runStepR x        = runStepR $ stepR x
+
+stepR :: ([[Tag]], [InnerRep]) -> ([[Tag]], [InnerRep])
+stepR (ts, irs) = (ts ++ [map (fst . tagsFix) irs], concatMap (snd . tagsFix) irs)
+
+prepareStepR :: InnerRep -> ([[Tag]], [InnerRep])
+prepareStepR x = case tagsFix x of (t, irs) -> ([[t]], irs)
+
+step2 :: (Tag, [Tag], [InnerRep]) -> (Tag, [Tag], [Tag], [InnerRep])
+step2 (t, ts, irs) = (t, ts, map (fst . tagsFix) irs, concatMap (snd . tagsFix) irs)
+
+step :: (Tag, [InnerRep]) -> (Tag, [Tag], [InnerRep])
+step (t, rs) = (t, map (fst . tagsFix) rs, concatMap (snd . tagsFix) rs)
+
+tagsFix :: InnerRep -> (Tag, [InnerRep])
+tagsFix (Base x)               = (1, [])
+tagsFix (Tagged xss)           = (length xss, concatMap unIP xss)
