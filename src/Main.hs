@@ -10,6 +10,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE TypeOperators #-}
 
 
 module Main where
@@ -24,6 +25,7 @@ import GHC.Float
 import Data.Maybe
 import Data.Universe.Helpers (cartesianProduct)
 import Data.List (sortBy, transpose, nub)
+import Generics.SOP.NS
 
 -- class SizeOf a where
 --   sizeof :: a -> DataShape
@@ -295,4 +297,68 @@ allignment :: InnerRep -> ([[Store]],[[Store]])
 allignment = allign . splitTags . sortTags . flatten
 
 sizeOf :: ([[Store]], [[Store]]) -> Int
-sizeOf (ts, ds) = sum (map (maximum . map (\(Tag x) -> log2 x)) ts) + sum (map (maximum . map (\(Value x) -> x)) ds)
+sizeOf (ts, ds) = sizeOf' (\(Tag x) -> log2 x) ts + sizeOf' (\(Value x) -> x) ds
+
+sizeOf' :: (Store -> Int) -> [[Store]] -> Int
+sizeOf' f xs = sum (map (maximum . map f) xs)
+
+---
+
+somethingSOP :: SOP I '[ '[Bool], '[Int]] -- kind [[*]]
+somethingSOP = SOP (S (Z (I 3 :* Nil)))
+
+somethingSOP2 :: SOP I '[ '[Bool], '[Int]]
+somethingSOP2 = SOP (Z (I True :* Nil))
+
+somethingPOP :: POP I '[ '[Bool], '[Int]]
+somethingPOP = POP ((I True :* Nil) :* (I 1 :* Nil) :* Nil)
+
+fromE :: NS (NP I) '[ '[Either Int Int], '[Either Int Int]]
+fromE = unSOP $ from (Right (Left 1))
+
+nogiets :: SOP (NS (NP I)) (x : '[ '[Integer] : xs1] : xs2)
+nogiets = SOP (S (Z (Z (I 1 :* Nil) :* Nil)))
+
+-- TODO: map from (Right (Left 1)) to nogiets
+
+mapping :: SOP I '[ '[Either Int Int], '[Either Int Int]] -> a
+mapping x = undefined $ unSOP x
+
+-- useful crap: index_NS: get the index of the constructor
+
+class MemVal a where
+  choices :: a -> [Int]
+
+instance MemVal Int16 where
+  choices = const []
+
+
+instance MemVal Int where
+  choices = const []
+
+instance (MemVal l, MemVal r) => MemVal (Either l r) where
+  choices = gchoices
+
+-- This definition could be better:
+-- - Define singleton sums with an empty list
+-- - Define a default for base types (`[]`)
+gchoices :: (Generic a, All2 MemVal (Code a)) => a -> [Int]
+gchoices x = index_NS (unSOP $ from x) : gchoices' x
+
+gchoices' :: (Generic a, All2 MemVal (Code a)) => a -> [Int]
+gchoices' x = concat $ hcollapse $ hcliftA pMemVal (K . choices . unI) $ from x
+
+pMemVal :: Proxy MemVal
+pMemVal = Proxy
+
+class NFData a where
+  rnf :: a -> [Int]
+
+instance NFData [[Int]] where
+  rnf = map sum
+
+grnf :: (Generic a, All2 NFData (Code a)) => a -> [Int]
+grnf = rnf . hcollapse . hcliftA p (K . rnf . unI) . from
+
+p :: Proxy NFData
+p = Proxy
