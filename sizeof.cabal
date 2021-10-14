@@ -62,6 +62,7 @@ executable sizeof
                      , accelerate
                      , math-functions
                      , universe-base == 1.1.2
+                     , typelits-witnesses == 0.4.0.0
 
   -- Directories containing source files.
   hs-source-dirs:      src

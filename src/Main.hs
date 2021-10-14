@@ -11,6 +11,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE PolyKinds #-}
 
 
 module Main where
@@ -27,6 +28,11 @@ import Data.Universe.Helpers (cartesianProduct)
 import Data.List (sortBy, transpose, nub)
 import Generics.SOP.NS
 
+import GHC.TypeLits
+-- import GHC.TypeLits.Compare
+-- import Data.Type.Equality
+-- import Data.Proxy
+-- import Control.Applicative
 -- class SizeOf a where
 --   sizeof :: a -> DataShape
 
@@ -342,6 +348,7 @@ instance (MemVal l, MemVal r) => MemVal (Either l r) where
 -- This definition could be better:
 -- - Define singleton sums with an empty list
 -- - Define a default for base types (`[]`)
+-- - Types should restrict list length and tag indices
 gchoices :: (Generic a, All2 MemVal (Code a)) => a -> [Int]
 gchoices x = index_NS (unSOP $ from x) : gchoices' x
 
@@ -362,3 +369,62 @@ grnf = rnf . hcollapse . hcliftA p (K . rnf . unI) . from
 
 p :: Proxy NFData
 p = Proxy
+
+-- data Nat = Zero
+--          | Succ Nat
+
+-- data Max m where
+--   Max :: forall n m . (KnownNat n, n < m)
+
+-- ttwo :: Succ (Succ Zero)
+-- ttwo = Succ (Succ Zero)
+
+-- type level list of naturals:
+-- ('Succ 'Zero) ': ('Succ ('Succ 'Zero)) ': '[] :: [Nat]
+
+-- difference :: forall n m. (KnownNat n,KnownNat m,n <= m)
+--            => Proxy n
+--            -> Proxy m
+--            -> Integer
+-- difference pn pm = natVal pm - natVal pn
+
+data Vector n a where
+  VNil :: Vector 0 a
+  VCons :: a -> Vector n a -> Vector (1 + n) a
+
+instance Show a => Show (Vector n a) where
+  show VNil = "[]"
+  show (VCons x xs) = show x ++ " : " ++ show xs
+
+class TypedMemVal x where
+  type Length x :: Nat
+  -- Int should be a restricted type Max that restricts the tag choice
+  -- to the corresponding constructors
+  -- This type should also have a Bottom value to represent nonchoice
+  typedChoices :: x -> Vector (Length x) Int
+
+instance TypedMemVal Int where
+  type Length Int = 0
+  typedChoices _ = VNil
+
+instance TypedMemVal (Either Int Int) where
+  type Length (Either Int Int) = 1
+  typedChoices (Right r) = VCons 0 (typedChoices r)
+  typedChoices (Left l)  = VCons 1 (typedChoices l)
+
+instance TypedMemVal (Either (Either Int Int) (Either Int Int)) where
+  -- should be something like 1 + max (l r)
+  -- but that might not be a lot of fun on the type level
+  type Length (Either (Either Int Int) (Either Int Int)) = 2
+  typedChoices (Right r) = VCons 0 (typedChoices r)
+  typedChoices (Left l)  = VCons 1 (typedChoices l)
+
+instance TypedMemVal (Maybe Int) where
+  type Length (Maybe Int) = 1
+  typedChoices Nothing  = VCons 0 VNil
+  typedChoices (Just x) = VCons 1 VNil
+
+instance TypedMemVal (Maybe (Maybe Int)) where
+  type Length (Maybe (Maybe Int)) = 2
+  typedChoices Nothing  = VCons 0 (VCons 0 VNil)
+  typedChoices (Just x) = VCons 1 (typedChoices x)
