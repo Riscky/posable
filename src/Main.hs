@@ -392,29 +392,52 @@ p = Proxy
 --            -> Integer
 -- difference pn pm = natVal pm - natVal pn
 
-data Vector n a where
-  VNil :: Vector 0 a
-  VCons :: a -> Vector n a -> Vector (1 + n) a
+-- Length-indexed homegeneous lists
+data Array n a where
+  ANil :: Array 0 a
+  ACons :: a -> Array n a -> Array (1 + n) a
 
-instance Show a => Show (Vector n a) where
+-- Length-indexed heterogeneous lists
+data Vector n where
+  VNil :: Vector 0
+  VCons :: a -> Vector n -> Vector (1 + n)
+
+instance Show a => Show (Array n a) where
+  show ANil = "[]"
+  show (ACons x xs) = show x ++ " : " ++ show xs
+
+instance Show (Vector n) where
   show VNil = "[]"
-  show (VCons x xs) = show x ++ " : " ++ show xs
+  show (VCons x xs) = "somevalue" ++ " : " ++ show xs
 
 class TypedMemVal x where
   type Length x :: Nat
   -- Int should be a restricted type Max that restricts the tag choice
   -- to the corresponding constructors
   -- This type should also have a Bottom value to represent nonchoice
-  typedChoices :: x -> Vector (Length x) Int
+  typedChoices :: x -> Array (Length x) Int
+
+  type FieldLength x :: Nat
+  -- This is even more beautiful: every value in the Array
+  -- should have a seperate type that denotes the possible values,
+  -- including bottom (if that is possible for the field)
+  -- Values can have different bitlenghts too, so its gonna
+  -- take some deep magic to perform this act
+  fields :: x -> Vector (FieldLength x)
 
 instance TypedMemVal Int where
   type Length Int = 0
-  typedChoices _ = VNil
+  typedChoices _ = ANil
+  type FieldLength Int = 1
+  fields x = VCons x VNil
 
 instance TypedMemVal (Either Int Int) where
   type Length (Either Int Int) = 1
-  typedChoices (Right r) = VCons 0 (typedChoices r)
-  typedChoices (Left l)  = VCons 1 (typedChoices l)
+  typedChoices (Right r) = ACons 0 (typedChoices r)
+  typedChoices (Left l)  = ACons 1 (typedChoices l)
+  type FieldLength (Either Int Int) = 1
+  fields (Right x) = VCons x VNil
+  fields (Left x)  = VCons x VNil
 
 instance TypedMemVal (Either (Either Int Int) (Either Int Int)) where
   -- should be something like 1 + max (typedChoices l) (typedChoices r)
@@ -424,18 +447,27 @@ instance TypedMemVal (Either (Either Int Int) (Either Int Int)) where
   -- See https://hackage.haskell.org/package/first-class-families-0.8.0.1/docs/Fcf.html
   -- for the needed typelevel operations to actually create such a list of type-dependend length.
   type Length (Either (Either Int Int) (Either Int Int)) = 2
-  typedChoices (Right r) = VCons 0 (typedChoices r)
-  typedChoices (Left l)  = VCons 1 (typedChoices l)
+  typedChoices (Right r) = ACons 0 (typedChoices r)
+  typedChoices (Left l)  = ACons 1 (typedChoices l)
+  type FieldLength (Either (Either Int Int) (Either Int Int)) = 1
+  fields (Right x) = fields x
+  fields (Left x)  = fields x
 
 instance TypedMemVal (Maybe Int) where
   type Length (Maybe Int) = 1
-  typedChoices Nothing  = VCons 0 VNil
-  typedChoices (Just x) = VCons 1 VNil
+  typedChoices Nothing  = ACons 0 ANil
+  typedChoices (Just x) = ACons 1 ANil
+  type FieldLength (Maybe Int) = 1
+  fields (Just x) = VCons x VNil
+  fields Nothing  = VCons 0 VNil -- should be bottom value
 
 instance TypedMemVal (Maybe (Maybe Int)) where
   type Length (Maybe (Maybe Int)) = 2
-  typedChoices Nothing  = VCons 0 (VCons 0 VNil)
-  typedChoices (Just x) = VCons 1 (typedChoices x)
+  typedChoices Nothing  = ACons 0 (ACons 0 ANil)
+  typedChoices (Just x) = ACons 1 (typedChoices x)
+  type FieldLength (Maybe (Maybe Int)) = 1
+  fields (Just x) = fields x
+  fields Nothing  = VCons 0 VNil -- should be bottom value
 
 -- we might need something like https://hackage.haskell.org/package/finite-typelits-0.1.4.2/docs/Data-Finite-Internal.html
 -- to do finite values
@@ -454,8 +486,9 @@ instance TypedMemVal (Int, Int) where
   type Length (Int, Int) = 0
   -- Should be:
   -- type Length (a, b) = Length a + Length b
-  -- Need to write a ++ instance for Vectors to get this to work
+  -- Need to write a ++ instance for Array to get this to work
   -- I haven't found an implementation for this on Hackage (yet)
   -- typedChoices (a, b) = typedChoices a ++ typedChoices b
-  typedChoices _ = VNil
-
+  typedChoices _ = ANil
+  type FieldLength (Int, Int) = 2
+  fields (x,y) = VCons x (VCons y VNil)
