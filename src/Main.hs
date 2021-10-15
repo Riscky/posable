@@ -450,9 +450,12 @@ instance TypedMemVal (Maybe (Maybe Int)) where
 --   Bottom :: Tagged 0
 --   Choice :: (KnownNat n, n <= m) => n -> Tagged 0
 
--- Need to write a ++ instance for Vectors to get this to work
--- I haven't found an implementation for this on Hackage (yet)
+instance TypedMemVal (Int, Int) where
+  type Length (Int, Int) = 0
+  -- Should be:
+  -- type Length (a, b) = Length a + Length b
+  -- Need to write a ++ instance for Vectors to get this to work
+  -- I haven't found an implementation for this on Hackage (yet)
+  -- typedChoices (a, b) = typedChoices a ++ typedChoices b
+  typedChoices _ = VNil
 
--- instance (TypedMemVal a, TypedMemVal b) => TypedMemVal (a, b) where
---   type Length (a, b) = Length a + Length b
---   typedChoices (a, b) = typedChoices a ++ typedChoices b
