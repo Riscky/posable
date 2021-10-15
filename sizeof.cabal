@@ -63,6 +63,8 @@ executable sizeof
                      , math-functions
                      , universe-base == 1.1.2
                      , typelits-witnesses == 0.4.0.0
+                     , ghc-typelits-extra == 0.4.3
+                     , first-class-families == 0.8.0.1
 
   -- Directories containing source files.
   hs-source-dirs:      src

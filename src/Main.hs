@@ -12,6 +12,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 
 module Main where
@@ -29,6 +30,9 @@ import Data.List (sortBy, transpose, nub)
 import Generics.SOP.NS
 
 import GHC.TypeLits
+import GHC.TypeLits.Extra
+-- import Fcf.Core (Eval)
+-- import Fcf.Data.List (ZipWith)
 -- import GHC.TypeLits.Compare
 -- import Data.Type.Equality
 -- import Data.Proxy
@@ -413,8 +417,12 @@ instance TypedMemVal (Either Int Int) where
   typedChoices (Left l)  = VCons 1 (typedChoices l)
 
 instance TypedMemVal (Either (Either Int Int) (Either Int Int)) where
-  -- should be something like 1 + max (l r)
+  -- should be something like 1 + max (typedChoices l) (typedChoices r)
   -- but that might not be a lot of fun on the type level
+  -- see: https://hackage.haskell.org/package/ghc-typelits-extra for a max type
+  -- This package also has a ceil+log operation that might be the typelevel equivalent to our log2 function
+  -- See https://hackage.haskell.org/package/first-class-families-0.8.0.1/docs/Fcf.html
+  -- for the needed typelevel operations to actually create such a list of type-dependend length.
   type Length (Either (Either Int Int) (Either Int Int)) = 2
   typedChoices (Right r) = VCons 0 (typedChoices r)
   typedChoices (Left l)  = VCons 1 (typedChoices l)
@@ -428,3 +436,23 @@ instance TypedMemVal (Maybe (Maybe Int)) where
   type Length (Maybe (Maybe Int)) = 2
   typedChoices Nothing  = VCons 0 (VCons 0 VNil)
   typedChoices (Just x) = VCons 1 (typedChoices x)
+
+-- we might need something like https://hackage.haskell.org/package/finite-typelits-0.1.4.2/docs/Data-Finite-Internal.html
+-- to do finite values
+
+-- data Tagged where
+--   Bottom :: Nat -> Tagged
+--   Choice :: (n ~ Nat, m ~ Nat, n <= m) => n -> m -> Tagged
+
+-- data family Tagged :: Nat -> Type
+
+-- data instance (Tagged 0) where
+--   Bottom :: Tagged 0
+--   Choice :: (KnownNat n, n <= m) => n -> Tagged 0
+
+-- Need to write a ++ instance for Vectors to get this to work
+-- I haven't found an implementation for this on Hackage (yet)
+
+-- instance (TypedMemVal a, TypedMemVal b) => TypedMemVal (a, b) where
+--   type Length (a, b) = Length a + Length b
+--   typedChoices (a, b) = typedChoices a ++ typedChoices b
