@@ -31,6 +31,8 @@ import Generics.SOP.NS
 
 import GHC.TypeLits
 import GHC.TypeLits.Extra
+
+import Data.Finite.Internal
 -- import Fcf.Core (Eval)
 -- import Fcf.Data.List (ZipWith)
 -- import GHC.TypeLits.Compare
@@ -492,3 +494,73 @@ instance TypedMemVal (Int, Int) where
   typedChoices _ = ANil
   type FieldLength (Int, Int) = 2
   fields (x,y) = VCons x (VCons y VNil)
+
+-- finite integers be like:
+x :: Finite 5
+x = 4
+
+-- Length-indexed heterogeneous lists with explicit types
+data RVector n xs where
+  RVNil :: RVector 0 '[]
+  RVCons :: x -> RVector n xs -> RVector (1 + n) (x ': xs)
+
+instance (All Show xs) =>  Show (RVector n xs) where
+  show RVNil = "[]"
+  show (RVCons a as) = show a ++ ":" ++ show as
+
+-- Length-indexed heterogeneous lists with explicit types, constrained to `Finite`s
+-- Has no inhabitants because `Finite :: Nat -> *` instead of `Nat -> Finite Nat`
+data FVector n xs where
+  FVNil :: FVector 0 '[]
+  FVCons :: Finite a -> FVector n xs -> FVector (1 + n) (Finite a ': xs)
+
+class MoreTypedMemVal x where
+  type MTFieldLength x :: Nat
+  type MTFieldTypes x :: [*]
+  -- RVector should capture the actual types of the fields
+  -- This is severely complicated by the fact that in a sum
+  -- each branch can have different types of fields
+  -- We need a typelevel sum to express this (probably)
+  mtfields :: x -> RVector (MTFieldLength x) (MTFieldTypes x)
+
+instance MoreTypedMemVal Int where
+  type MTFieldLength Int = 1
+  type MTFieldTypes Int = '[Int]
+  mtfields x = RVCons x RVNil
+
+instance MoreTypedMemVal (Either Int Int) where
+  type MTFieldLength (Either Int Int) = 1
+  type MTFieldTypes (Either Int Int) = '[Int]
+  mtfields (Right x) = RVCons x RVNil
+  mtfields (Left x)  = RVCons x RVNil
+
+instance MoreTypedMemVal Float where
+  type MTFieldLength Float = 1
+  type MTFieldTypes Float = '[Float]
+  mtfields x = RVCons x RVNil
+
+instance MoreTypedMemVal (Either Float Int) where
+  type MTFieldLength (Either Float Int) = 1
+  -- well doesn't that just lift our problem to the next level?
+  -- maybe it does, and also Either does not have the right semantics here, since
+  -- Right should contain the result of a succesful computation, while Left should
+  -- contain an error message or result of unsuccesful computation.
+  -- But who cares about semantics if you can do union kinds?
+  type MTFieldTypes (Either Float Int) = '[Either Float Int]
+  mtfields (Right x) = RVCons (Right x) RVNil
+  mtfields (Left x)  = RVCons (Left x) RVNil
+
+instance MoreTypedMemVal (Either (Either Float Int) (Either Float Int)) where
+  type MTFieldLength (Either (Either Float Int) (Either Float Int)) = 1
+  type MTFieldTypes (Either (Either Float Int) (Either Float Int)) = '[Either Float Int]
+  mtfields (Right x) = mtfields x
+  mtfields (Left x)  = mtfields x
+
+instance MoreTypedMemVal (Either (Either Float Int) (Either Int Int)) where
+  type MTFieldLength (Either (Either Float Int) (Either Int Int)) = 1
+  type MTFieldTypes (Either (Either Float Int) (Either Int Int)) = '[Either Float Int]
+  mtfields (Left x)  = mtfields x
+  -- Sadly this is a problem: we cannot (yet) lift `'[Int]` to `'[Either Int Float]`.
+  -- mtfields (Right x) = mtfields x
+
+-- TODO: we don't really need the index of RVector, so lets drop that
