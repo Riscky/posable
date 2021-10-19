@@ -590,10 +590,21 @@ instance MoreTypedMemVal (Int, Float) where
 instance MoreTypedMemVal (Either Int Float, Float) where
   type MTFieldTypes (Either Int Float, Float) = '[RNS '[Int, Float], Float]
   mtfields (x,y) = case mtfields x of
-    -- here we don't use rv, but we should merge rv
-    -- with (RVCons y RVNil) in the generic case
     RVCons x' rv -> RVCons x' (RVCons y RVNil)
+
+instance MoreTypedMemVal (Either (Int, Float) Float) where
+  type MTFieldTypes (Either (Int, Float) Float) = '[RNS '[Int, Float], RNS '[Float]]
+  mtfields (Left x) = case mtfields x of
+    RVCons x' (RVCons y RVNil) -> RVCons (RZ x') (RVCons (RZ y) RVNil)
+  mtfields (Right x) = case mtfields x of
+    RVCons x' RVNil -> RVCons (RS $ RZ x') (RVCons Bottom RVNil)
+
+instance MoreTypedMemVal (Either (Int, Float) Float, Float) where
+  type MTFieldTypes (Either (Int, Float) Float, Float) = '[RNS '[Int, Float], RNS '[Float], RNS '[Float]]
+  mtfields (x,y) = case (mtfields x, mtfields y) of
+    (RVCons x' (RVCons x'' RVNil), RVCons y' RVNil) -> RVCons x' (RVCons x'' (RVCons (RZ y') RVNil))
 
 data RNS :: [*] -> Type where
   RZ :: x -> RNS (x ': xs)
   RS :: RNS xs -> RNS (x ': xs)
+  Bottom :: RNS xs
