@@ -502,7 +502,7 @@ x = 4
 -- Length-indexed heterogeneous lists with explicit types
 data RVector xs where
   RVNil :: RVector '[]
-  RVCons :: x -> RVector xs -> RVector (x ': xs)
+  RVCons :: x -> RVector ys -> RVector (x ': ys)
 
 instance (All Show xs) =>  Show (RVector xs) where
   show RVNil = "[]"
@@ -541,7 +541,7 @@ instance MoreTypedMemVal (Either Float Int) where
   mtfields (Right x) = RVCons (RS $ RZ x) RVNil
 
 instance MoreTypedMemVal (Either Int Float) where
-  type MTFieldTypes (Either Int Float) = '[RNS (Int : Float : '[])]
+  type MTFieldTypes (Either Int Float) = '[RNS '[Int, Float]]
   mtfields (Left x)  = RVCons (RZ x) RVNil
   mtfields (Right x) = RVCons (RS $ RZ x) RVNil
 
@@ -583,14 +583,14 @@ instance MoreTypedMemVal (Either (Either Float Int) (Either Int Float)) where
                           RZ x'' -> RVCons (RS $ RS $ RZ x'') rv
                           RS (RZ x'') -> RVCons (RS $ RS $ RS $ RZ x'') rv
 
-instance MoreTypedMemVal (Int, Float) where
-  type MTFieldTypes (Int, Float) = '[Int, Float]
-  mtfields (x,y) = RVCons x (RVCons y RVNil)
+-- instance MoreTypedMemVal (Int, Float) where
+--   type MTFieldTypes (Int, Float) = '[Int, Float]
+--   mtfields (x,y) = RVCons x (RVCons y RVNil)
 
-instance MoreTypedMemVal (Either Int Float, Float) where
-  type MTFieldTypes (Either Int Float, Float) = '[RNS '[Int, Float], Float]
-  mtfields (x,y) = case mtfields x of
-    RVCons x' rv -> RVCons x' (RVCons y RVNil)
+-- instance MoreTypedMemVal (Either Int Float, Float) where
+--   type MTFieldTypes (Either Int Float, Float) = '[RNS '[Int, Float], Float]
+--   mtfields (x,y) = case mtfields x of
+--     RVCons x' rv -> RVCons x' (RVCons y RVNil)
 
 instance MoreTypedMemVal (Either (Int, Float) Float) where
   type MTFieldTypes (Either (Int, Float) Float) = '[RNS '[Int, Float], RNS '[Float]]
@@ -599,12 +599,31 @@ instance MoreTypedMemVal (Either (Int, Float) Float) where
   mtfields (Right x) = case mtfields x of
     RVCons x' RVNil -> RVCons (RS $ RZ x') (RVCons Bottom RVNil)
 
-instance MoreTypedMemVal (Either (Int, Float) Float, Float) where
-  type MTFieldTypes (Either (Int, Float) Float, Float) = '[RNS '[Int, Float], RNS '[Float], RNS '[Float]]
-  mtfields (x,y) = case (mtfields x, mtfields y) of
-    (RVCons x' (RVCons x'' RVNil), RVCons y' RVNil) -> RVCons x' (RVCons x'' (RVCons (RZ y') RVNil))
+-- instance MoreTypedMemVal (Either (Int, Float) Float, Float) where
+--   type MTFieldTypes (Either (Int, Float) Float, Float) = '[RNS '[Int, Float], RNS '[Float], RNS '[Float]]
+--   mtfields (x,y) = case (mtfields x, mtfields y) of
+--     (RVCons x' (RVCons x'' RVNil), RVCons y' RVNil) -> RVCons x' (RVCons x'' (RVCons (RZ y') RVNil))
+
+instance (MoreTypedMemVal x, MoreTypedMemVal y) => MoreTypedMemVal (x, y) where
+  type MTFieldTypes (x, y) = MTFieldTypes x ++ MTFieldTypes y
+  -- oh yes, concat for RVector solves some of my problems
+  mtfields (x,y) = rvconcat (mtfields x) (mtfields y)
+
+-- could (should) be an applicative
+rvconcat :: RVector x -> RVector y -> RVector (x ++ y)
+rvconcat RVNil         ys = ys
+rvconcat (RVCons x xs) ys = RVCons x (rvconcat xs ys)
 
 data RNS :: [*] -> Type where
   RZ :: x -> RNS (x ': xs)
   RS :: RNS xs -> RNS (x ': xs)
   Bottom :: RNS xs
+
+-- shamelessly stolen from https://hackage.haskell.org/package/type-combinators-0.2.4.3
+-- which requires an older version of base that I'm not willing to support right now
+-- | Appends two type-level lists.
+type family (as :: [k]) ++ (bs :: [k]) :: [k] where
+  '[]         ++ bs = bs
+  (a ': as) ++ bs = a ': (as ++ bs)
+infixr 5 ++
+
