@@ -536,13 +536,12 @@ instance MoreTypedMemVal Float where
   mtfields x = RVCons x RVNil
 
 instance MoreTypedMemVal (Either Float Int) where
-  -- well doesn't that just lift our problem to the next level?
-  -- maybe it does, and also Either does not have the right semantics here, since
-  -- Right should contain the result of a succesful computation, while Left should
-  -- contain an error message or result of unsuccesful computation.
-  -- But who cares about semantics if you can do union kinds?
-  -- A solution may be found in the way NS is represented in the generic-sop library
   type MTFieldTypes (Either Float Int) = '[RNS (Float : Int : '[])]
+  mtfields (Left x)  = RVCons (RZ x) RVNil
+  mtfields (Right x) = RVCons (RS $ RZ x) RVNil
+
+instance MoreTypedMemVal (Either Int Float) where
+  type MTFieldTypes (Either Int Float) = '[RNS (Int : Float : '[])]
   mtfields (Left x)  = RVCons (RZ x) RVNil
   mtfields (Right x) = RVCons (RS $ RZ x) RVNil
 
@@ -555,7 +554,45 @@ instance MoreTypedMemVal (Either (Either Float Int) (Either Int Int)) where
   type MTFieldTypes (Either (Either Float Int) (Either Int Int)) = '[RNS (Float : Int : '[])]
   mtfields (Left x)  = mtfields x
   mtfields (Right x) = case mtfields x of
-                        RVCons x' rv -> RVCons (RS $ RZ x') RVNil
+                        RVCons x' rv -> RVCons (RS $ RZ x') rv
+
+-- instance (MoreTypedMemVal l, MoreTypedMemVal r) => MoreTypedMemVal (Either l r) where
+  -- The dream: generically, recursively calculating fieldtypes
+  -- The problem: I'm unsure what the type here should be (but we have examples) and
+  -- we don't have the operators yet to construct the type.
+  -- We probably have to make a set of such operators, but lets first find out what we
+  -- need exactly
+  -- type MTFieldTypes (Either l r) = MTFieldTypes l ++ MTFieldTypes r
+  -- mtfields (Right x) = mtfields x
+  -- mtfields (Left x)  = mtfields x
+
+instance MoreTypedMemVal (Either (Either Float Int) (Either Int Float)) where
+  type MTFieldTypes (Either (Either Float Int) (Either Int Float)) = '[RNS (Float : Int : Int : Float : '[])]
+  mtfields (Left x)  = case mtfields x of
+                        -- patterns are actually complete
+                        -- types are not strong enough here to discover
+                        -- mtfields x is actually of the correct type
+                        RVCons x' rv -> case x' of
+                          RZ x'' -> RVCons (RZ x'') rv
+                          RS (RZ x'') -> RVCons (RS $ RZ x'') rv
+  mtfields (Right x) = case mtfields x of
+                        -- type system doesn't understand that
+                        -- RVCons x' rv -> RVCons (RS $ RS $ x') rv
+                        -- would be enough
+                        RVCons x' rv -> case x' of
+                          RZ x'' -> RVCons (RS $ RS $ RZ x'') rv
+                          RS (RZ x'') -> RVCons (RS $ RS $ RS $ RZ x'') rv
+
+instance MoreTypedMemVal (Int, Float) where
+  type MTFieldTypes (Int, Float) = '[Int, Float]
+  mtfields (x,y) = RVCons x (RVCons y RVNil)
+
+instance MoreTypedMemVal (Either Int Float, Float) where
+  type MTFieldTypes (Either Int Float, Float) = '[RNS '[Int, Float], Float]
+  mtfields (x,y) = case mtfields x of
+    -- here we don't use rv, but we should merge rv
+    -- with (RVCons y RVNil) in the generic case
+    RVCons x' rv -> RVCons x' (RVCons y RVNil)
 
 data RNS :: [*] -> Type where
   RZ :: x -> RNS (x ': xs)
