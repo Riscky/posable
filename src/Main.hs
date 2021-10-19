@@ -523,8 +523,8 @@ class MoreTypedMemVal x where
   mtfields :: x -> RVector (MTFieldTypes x)
 
 instance MoreTypedMemVal Int where
-  type MTFieldTypes Int = '[Int]
-  mtfields x = RVCons x RVNil
+  type MTFieldTypes Int = '[RNS '[Int]]
+  mtfields x = RVCons (RZ x) RVNil
 
 instance MoreTypedMemVal (Either Int Int) where
   type MTFieldTypes (Either Int Int) = '[Int]
@@ -532,8 +532,8 @@ instance MoreTypedMemVal (Either Int Int) where
   mtfields (Left x)  = RVCons x RVNil
 
 instance MoreTypedMemVal Float where
-  type MTFieldTypes Float = '[Float]
-  mtfields x = RVCons x RVNil
+  type MTFieldTypes Float = '[RNS '[Float]]
+  mtfields x = RVCons (RZ x) RVNil
 
 instance MoreTypedMemVal (Either Float Int) where
   type MTFieldTypes (Either Float Int) = '[RNS (Float : Int : '[])]
@@ -557,14 +557,14 @@ instance MoreTypedMemVal (Either (Either Float Int) (Either Int Int)) where
                         RVCons x' rv -> RVCons (RS $ RZ x') rv
 
 -- instance (MoreTypedMemVal l, MoreTypedMemVal r) => MoreTypedMemVal (Either l r) where
-  -- The dream: generically, recursively calculating fieldtypes
-  -- The problem: I'm unsure what the type here should be (but we have examples) and
-  -- we don't have the operators yet to construct the type.
-  -- We probably have to make a set of such operators, but lets first find out what we
-  -- need exactly
-  -- type MTFieldTypes (Either l r) = MTFieldTypes l ++ MTFieldTypes r
-  -- mtfields (Right x) = mtfields x
-  -- mtfields (Left x)  = mtfields x
+--   -- The dream: generically, recursively calculating fieldtypes
+--   -- The problem: I'm unsure what the type here should be (but we have examples) and
+--   -- we don't have the operators yet to construct the type.
+--   -- We probably have to make a set of such operators, but lets first find out what we
+--   -- need exactly
+--   type MTFieldTypes (Either l r) = MTFieldTypes l <*> (MTFieldTypes r)
+--   mtfields (Right x) = mtfields x
+--   mtfields (Left x)  = mtfields x
 
 instance MoreTypedMemVal (Either (Either Float Int) (Either Int Float)) where
   type MTFieldTypes (Either (Either Float Int) (Either Int Float)) = '[RNS (Float : Int : Int : Float : '[])]
@@ -595,9 +595,9 @@ instance MoreTypedMemVal (Either (Either Float Int) (Either Int Float)) where
 instance MoreTypedMemVal (Either (Int, Float) Float) where
   type MTFieldTypes (Either (Int, Float) Float) = '[RNS '[Int, Float], RNS '[Float]]
   mtfields (Left x) = case mtfields x of
-    RVCons x' (RVCons y RVNil) -> RVCons (RZ x') (RVCons (RZ y) RVNil)
+    RVCons (RZ x') (RVCons y RVNil) -> RVCons (RZ x') (RVCons y RVNil)
   mtfields (Right x) = case mtfields x of
-    RVCons x' RVNil -> RVCons (RS $ RZ x') (RVCons Bottom RVNil)
+    RVCons x' RVNil -> RVCons (RS x') (RVCons Bottom RVNil)
 
 -- instance MoreTypedMemVal (Either (Int, Float) Float, Float) where
 --   type MTFieldTypes (Either (Int, Float) Float, Float) = '[RNS '[Int, Float], RNS '[Float], RNS '[Float]]
@@ -627,3 +627,22 @@ type family (as :: [k]) ++ (bs :: [k]) :: [k] where
   (a ': as) ++ bs = a ': (as ++ bs)
 infixr 5 ++
 
+-- :kind! ('[RS (RZ 1), RS (RZ 2)]) <*> ('[RS (RZ 4)])
+-- '['RS ('RZ 1) <> 'RS ('RZ 4), 'RS ('RZ 2)]
+
+-- RVector '[RNS '[Int, Float]] <*> RVector '[RNS '[Int, Float]]
+-- should become
+-- RVector '[RNS '[Int, Float, Int, Float]]
+
+-- type family (as :: RVector (a ': as)) <*> (bs :: RVector (b ': bs)) :: RVector (a ++ b) where
+--   '[]       <*> bs        = bs
+--   as        <*> '[]       = as
+--   (a ': as) <*> (b ': bs) = (a <> b) ': (as <*> bs)
+
+-- infixr 5 <*>
+
+-- type family (as :: RNS a) <> (bs :: RNS b) :: RNS c where
+--   x <> Bottom = x
+--   Bottom <> y = y
+
+-- infixr 5 <>
