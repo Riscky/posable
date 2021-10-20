@@ -16,6 +16,8 @@ import Generics.SOP (All, All2, Code, Generic)
 import Data.Int (Int8, Int16, Int32, Int64)
 import Data.Finite.Internal (Finite)
 
+import Fcf
+
 -----------------------------------------------------------------------
 -- Heterogeneous lists with explicit types
 data Vector xs where
@@ -28,21 +30,9 @@ instance (All Show xs) =>  Show (Vector xs) where
 
 -- concat for Vectors
 -- could (should) be an applicative
-rvconcat :: Vector x -> Vector y -> Vector (x ++ y)
+rvconcat :: Vector x -> Vector y -> Vector (Eval (x ++ y))
 rvconcat Nil         ys = ys
 rvconcat (Cons x xs) ys = Cons x (rvconcat xs ys)
-
------------------------------------------------------------------------
--- Type operators
-
--- shamelessly stolen from https://hackage.haskell.org/package/type-combinators-0.2.4.3
--- which requires an older version of base that I'm not willing to support right now
--- | Appends two type-level lists.
-type family (as :: [k]) ++ (bs :: [k]) :: [k] where
-  '[]       ++ bs = bs
-  (a ': as) ++ bs = a ': (as ++ bs)
-
-infixr 5 ++
 
 -----------------------------------------------------------------------
 -- Typelevel sums with a bottom value
@@ -189,8 +179,8 @@ instance MemRep (Either (Either Float Int) (Either Int8 Int16)) where
 -- Instance for product types (tuples)
 -- Recursively defined, because concatenation is a whole lot easier then zipWith (++)
 instance (MemRep x, MemRep y) => MemRep (x, y) where
-  type ChoiceTypes (x,y) = ChoiceTypes x ++ ChoiceTypes y
+  type ChoiceTypes (x,y) = Eval (ChoiceTypes x ++ ChoiceTypes y)
   choices (x,y) = rvconcat (choices x) (choices y)
 
-  type FieldTypes (x, y) = FieldTypes x ++ FieldTypes y
+  type FieldTypes (x, y) = Eval (FieldTypes x ++ FieldTypes y)
   fields (x,y) = rvconcat (fields x) (fields y)
