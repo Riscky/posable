@@ -46,6 +46,20 @@ instance (All Show x) => Show (RNS x) where
   show (RS x) = show x
   show Bottom = "_|_"
 
+-- This works:
+-- :kind! Eval (ZipWith (<>) '[RNS '[Float, Int], RNS '[Int64]] '[RNS '[Int8, Int16], RNS '[Float]])
+-- = '[RNS '[Float, Int, Int8, Int16], RNS '[Int64, Float]]
+-- but ZipWith creates a list of the length of the shortest input, which is not
+-- what we want. We might need to create our own ZipWith (or something like it)
+data (<>) :: * -> * -> Exp *
+
+type instance Eval ((<>) x y) = x </> y
+
+-- Type level append of RNS's
+-- We might want to use the correct operator here, but for now this works well enough
+type family (a :: *) </> (b :: *) :: * where
+  RNS a </> RNS b = RNS (Eval (a ++ b))
+
 -----------------------------------------------------------------------
 -- Machine types with their staticly known width
 class Base x where
