@@ -46,11 +46,23 @@ instance (All Show x) => Show (RNS x) where
   show (RS x) = show x
   show Bottom = "_|_"
 
--- This works:
--- :kind! Eval (ZipWith (<>) '[RNS '[Float, Int], RNS '[Int64]] '[RNS '[Int8, Int16], RNS '[Float]])
--- = '[RNS '[Float, Int, Int8, Int16], RNS '[Int64, Float]]
--- but ZipWith creates a list of the length of the shortest input, which is not
--- what we want. We might need to create our own ZipWith (or something like it)
+-- stolen from https://hackage.haskell.org/package/first-class-families-0.8.0.1
+-- and adapted to keep the length of the longest list
+--
+-- | Combine elements of two lists pairwise.
+--
+-- === __Example__
+--
+-- >>> :kind! Eval (ZipWith' (+) '[1,2,3] '[1,1])
+-- Eval (ZipWith' (+) '[1,2,3] '[1,1]) :: [Nat]
+-- = '[2, 3, 3]
+data ZipWith' :: (a -> b -> Exp c) -> [a] -> [b] -> Exp [c]
+type instance Eval (ZipWith' _f '[] _bs) = _bs
+type instance Eval (ZipWith' _f _as '[]) = _as
+type instance Eval (ZipWith' f (a ': as) (b ': bs)) =
+  Eval (f a b) ': Eval (ZipWith' f as bs)
+
+
 data (<>) :: * -> * -> Exp *
 
 type instance Eval ((<>) x y) = x </> y
