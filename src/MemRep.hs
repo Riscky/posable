@@ -30,7 +30,7 @@ instance (All Show xs) =>  Show (Vector xs) where
   show (Cons a as) = show a ++ ":" ++ show as
 
 -- concat for Vectors
--- could (should) be an applicative
+-- could (should) be a Semigroup instance (<>)
 rvconcat :: Vector x -> Vector y -> Vector (Eval (x ++ y))
 rvconcat Nil         ys = ys
 rvconcat (Cons x xs) ys = Cons x (rvconcat xs ys)
@@ -84,12 +84,15 @@ class MemRep x where
 
   widths :: [Int]
 
+  choicesBottom :: Vector (ChoiceTypes x)
+  fieldsBottom :: Vector (FieldTypes x)
+
 -----------------------------------------------------------------------
 -- Instances of MemRep for machine types
 
 -- Sadly, this definition does not work but gives the following error:
 -- 'Conflicting family instance declarations'
--- as soons as any other instance of ChoiceTypes or FieldTypes is declared
+-- as soon as any other instance of ChoiceTypes or FieldTypes is declared
 -- This is related to this GHC issue: https://gitlab.haskell.org/ghc/ghc/-/issues/4259
 -- and won't be fixed very soon probably
 
@@ -112,6 +115,9 @@ instance MemRep Int where
 
   widths = [32]
 
+  choicesBottom = Nil
+  fieldsBottom = Cons Bottom Nil
+
 instance MemRep Float where
   type ChoiceTypes Float = '[]
   choices _ = Nil
@@ -120,6 +126,9 @@ instance MemRep Float where
   fields x = Cons (RZ x) Nil
 
   widths = [32]
+
+  choicesBottom = Nil
+  fieldsBottom = Cons Bottom Nil
 
 instance MemRep Int8 where
   type ChoiceTypes Int8 = '[]
@@ -130,6 +139,9 @@ instance MemRep Int8 where
 
   widths = [8]
 
+  choicesBottom = Nil
+  fieldsBottom = Cons Bottom Nil
+
 instance MemRep Int16 where
   type ChoiceTypes Int16 = '[]
   choices _ = Nil
@@ -138,6 +150,9 @@ instance MemRep Int16 where
   fields x = Cons (RZ x) Nil
 
   widths = [16]
+
+  choicesBottom = Nil
+  fieldsBottom = Cons Bottom Nil
 
 -----------------------------------------------------------------------
 -- Instances of MemRep that should be generically derived in the future
@@ -162,6 +177,28 @@ instance MemRep Int16 where
 --   fields (Right x) = case fields x of
 --     Cons x' Nil -> _
 
+--   -- This might help significantly in the definition of fields
+--   -- and we might want to have something comparable for choices
+--   -- To this point I have not been able to come up with a definition of <>
+--   -- that typechecks however.
+--   -- It should not be too difficult however, it's just a Vector with the right amount of Bottoms of the right type
+--   choicesBottom = Cons Bottom (choicesBottom @ r <> choicesBottom @ l)
+--   fieldsBottom = fieldsBottom @ r <> fieldsBottom @ l
+
+
+instance (MemRep x) => MemRep (Maybe x) where
+  type ChoiceTypes (Maybe x) = Eval ('[RNS '[Finite 2]] ++ ChoiceTypes x)
+  choices Nothing  = Cons (RZ 0) (choicesBottom @ x)
+  choices (Just x) = Cons (RZ 1) (choices x)
+
+  type FieldTypes (Maybe x) = FieldTypes x
+  fields Nothing  = fieldsBottom @ x
+  fields (Just x) = fields x
+
+  widths = zipWith max (widths @ Float) (widths @ Int)
+
+  fieldsBottom = fieldsBottom @ x
+  choicesBottom = Cons Bottom (choicesBottom @ x)
 
 instance MemRep (Either Float Int) where
   type ChoiceTypes (Either Float Int) = '[RNS '[Finite 2]]
@@ -174,6 +211,8 @@ instance MemRep (Either Float Int) where
 
   widths = zipWith max (widths @ Float) (widths @ Int)
 
+  choicesBottom = Cons Bottom Nil
+  fieldsBottom = Cons Bottom Nil
 
 instance MemRep (Either Int8 Int16) where
   type ChoiceTypes (Either Int8 Int16) = '[RNS '[Finite 2]]
@@ -185,6 +224,9 @@ instance MemRep (Either Int8 Int16) where
   fields (Right x) = Cons (RS $ RZ x) Nil
 
   widths = zipWith max (widths @ Int8) (widths @ Int16)
+
+  fieldsBottom = Cons Bottom Nil
+  choicesBottom = Cons Bottom Nil
 
 
 instance MemRep (Either (Either Float Int) (Either Int8 Int16)) where
@@ -203,6 +245,8 @@ instance MemRep (Either (Either Float Int) (Either Int8 Int16)) where
 
   widths = zipWith max (widths @ (Either Float Int)) (widths @ (Either Int8 Int16))
 
+  fieldsBottom = Cons Bottom Nil
+  choicesBottom = Cons Bottom (Cons Bottom Nil)
 
 -- Instance for product types (tuples)
 -- Recursively defined, because concatenation is a whole lot easier then zipWith (++)
@@ -214,3 +258,6 @@ instance (MemRep x, MemRep y) => MemRep (x, y) where
   fields (x,y) = rvconcat (fields x) (fields y)
 
   widths = widths @ x ++ widths @ y
+
+  choicesBottom = rvconcat (choicesBottom @ x) (choicesBottom @ y)
+  fieldsBottom = rvconcat (fieldsBottom @ x) (fieldsBottom @ y)

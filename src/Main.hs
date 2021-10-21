@@ -341,11 +341,22 @@ mapping x = undefined $ unSOP x
 class MemVal a where
   choices :: a -> [Int]
 
+instance MemVal Int8 where
+  choices = const []
+
 instance MemVal Int16 where
   choices = const []
 
+instance MemVal Int32 where
+  choices = const []
+
+instance MemVal Int64 where
+  choices = const []
 
 instance MemVal Int where
+  choices = const []
+
+instance MemVal Float where
   choices = const []
 
 instance (MemVal l, MemVal r) => MemVal (Either l r) where
@@ -556,16 +567,6 @@ instance MoreTypedMemVal (Either (Either Float Int) (Either Int Int)) where
   mtfields (Right x) = case mtfields x of
                         RVCons x' rv -> RVCons (RS $ RZ x') rv
 
--- instance (MoreTypedMemVal l, MoreTypedMemVal r) => MoreTypedMemVal (Either l r) where
---   -- The dream: generically, recursively calculating fieldtypes
---   -- The problem: I'm unsure what the type here should be (but we have examples) and
---   -- we don't have the operators yet to construct the type.
---   -- We probably have to make a set of such operators, but lets first find out what we
---   -- need exactly
---   type MTFieldTypes (Either l r) = MTFieldTypes l <*> (MTFieldTypes r)
---   mtfields (Right x) = mtfields x
---   mtfields (Left x)  = mtfields x
-
 instance MoreTypedMemVal (Either (Either Float Int) (Either Int Float)) where
   type MTFieldTypes (Either (Either Float Int) (Either Int Float)) = '[RNS (Float : Int : Int : Float : '[])]
   mtfields (Left x)  = case mtfields x of
@@ -623,8 +624,9 @@ data RNS :: [*] -> Type where
 -- which requires an older version of base that I'm not willing to support right now
 -- | Appends two type-level lists.
 type family (as :: [k]) ++ (bs :: [k]) :: [k] where
-  '[]         ++ bs = bs
+  '[]       ++ bs = bs
   (a ': as) ++ bs = a ': (as ++ bs)
+
 infixr 5 ++
 
 -- :kind! ('[RS (RZ 1), RS (RZ 2)]) <*> ('[RS (RZ 4)])
@@ -634,15 +636,30 @@ infixr 5 ++
 -- should become
 -- RVector '[RNS '[Int, Float, Int, Float]]
 
--- type family (as :: RVector (a ': as)) <*> (bs :: RVector (b ': bs)) :: RVector (a ++ b) where
+-- RVector '[RNS '[Int], RNS '[Float]] <*> RVector '[RNS '[Float], RNS '[Float, Int]]
+-- should become
+-- RVector '[RNS '[Int, Float], RNS '[]]
+
+-- instance (MoreTypedMemVal l, MoreTypedMemVal r) => MoreTypedMemVal (Either l r) where
+--   -- The dream: generically, recursively calculating fieldtypes
+--   -- The problem: I'm unsure what the type here should be (but we have examples) and
+--   -- we don't have the operators yet to construct the type.
+--   -- We probably have to make a set of such operators, but lets first find out what we
+--   -- need exactly
+--   type MTFieldTypes (Either l r) = MTFieldTypes l <*> MTFieldTypes r
+--   mtfields (Right x) = mtfields x
+--   mtfields (Left x)  = mtfields x
+
+-- type family (as :: '[xs]) <*> (bs :: '[ys]) :: '[xs >< ys] where
 --   '[]       <*> bs        = bs
 --   as        <*> '[]       = as
---   (a ': as) <*> (b ': bs) = (a <> b) ': (as <*> bs)
+--   (a ': as) <*> (b ': bs) = (a ++ b) ': (as <*> bs)
 
 -- infixr 5 <*>
 
--- type family (as :: RNS a) <> (bs :: RNS b) :: RNS c where
---   x <> Bottom = x
---   Bottom <> y = y
+-- defines zip for RNS
+-- met dank aan Siem en Niels
+type family (as :: RNS xs) >< (bs :: RNS ys) :: RNS (a ++ b) where
+  _ >< _ = Bottom
 
--- infixr 5 <>
+infixr 5 ><
