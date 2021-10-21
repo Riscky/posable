@@ -9,6 +9,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE TypeApplications #-}
 
 module MemRep where
 
@@ -73,29 +74,6 @@ type family (a :: *) </> (b :: *) :: * where
   RNS a </> RNS b = RNS (Eval (a ++ b))
 
 -----------------------------------------------------------------------
--- Machine types with their staticly known width
-class Base x where
-  width :: Int
-
-instance Base Int8 where
-  width = 8
-
-instance Base Int16 where
-  width = 16
-
-instance Base Int32 where
-  width = 32
-
-instance Base Int64 where
-  width = 64
-
-instance Base Int where
-  width = 32
-
-instance Base Float where
-  width = 32
-
------------------------------------------------------------------------
 -- MemRep, the king of this file
 class MemRep x where
   type ChoiceTypes x :: [*]
@@ -103,6 +81,8 @@ class MemRep x where
 
   type FieldTypes x :: [*]
   fields :: x -> Vector (FieldTypes x)
+
+  widths :: [Int]
 
 -----------------------------------------------------------------------
 -- Instances of MemRep for machine types
@@ -130,12 +110,16 @@ instance MemRep Int where
   type FieldTypes Int = '[RNS '[Int]]
   fields x = Cons (RZ x) Nil
 
+  widths = [32]
+
 instance MemRep Float where
   type ChoiceTypes Float = '[]
   choices _ = Nil
 
   type FieldTypes Float = '[RNS '[Float]]
   fields x = Cons (RZ x) Nil
+
+  widths = [32]
 
 instance MemRep Int8 where
   type ChoiceTypes Int8 = '[]
@@ -144,12 +128,16 @@ instance MemRep Int8 where
   type FieldTypes Int8 = '[RNS '[Int8]]
   fields x = Cons (RZ x) Nil
 
+  widths = [8]
+
 instance MemRep Int16 where
   type ChoiceTypes Int16 = '[]
   choices _ = Nil
 
   type FieldTypes Int16 = '[RNS '[Int16]]
   fields x = Cons (RZ x) Nil
+
+  widths = [16]
 
 -----------------------------------------------------------------------
 -- Instances of MemRep that should be generically derived in the future
@@ -184,6 +172,8 @@ instance MemRep (Either Float Int) where
   fields (Left x)  = Cons (RZ x) Nil
   fields (Right x) = Cons (RS $ RZ x) Nil
 
+  widths = zipWith max (widths @ Float) (widths @ Int)
+
 
 instance MemRep (Either Int8 Int16) where
   type ChoiceTypes (Either Int8 Int16) = '[RNS '[Finite 2]]
@@ -193,6 +183,8 @@ instance MemRep (Either Int8 Int16) where
   type FieldTypes (Either Int8 Int16) = '[RNS '[Int8, Int16]]
   fields (Left x)  = Cons (RZ x) Nil
   fields (Right x) = Cons (RS $ RZ x) Nil
+
+  widths = zipWith max (widths @ Int8) (widths @ Int16)
 
 
 instance MemRep (Either (Either Float Int) (Either Int8 Int16)) where
@@ -209,6 +201,9 @@ instance MemRep (Either (Either Float Int) (Either Int8 Int16)) where
   fields (Right x) = case fields x of
     Cons x' Nil      -> Cons (RS $ RS x') Nil
 
+  widths = zipWith max (widths @ (Either Float Int)) (widths @ (Either Int8 Int16))
+
+
 -- Instance for product types (tuples)
 -- Recursively defined, because concatenation is a whole lot easier then zipWith (++)
 instance (MemRep x, MemRep y) => MemRep (x, y) where
@@ -217,3 +212,5 @@ instance (MemRep x, MemRep y) => MemRep (x, y) where
 
   type FieldTypes (x, y) = Eval (FieldTypes x ++ FieldTypes y)
   fields (x,y) = rvconcat (fields x) (fields y)
+
+  widths = widths @ x ++ widths @ y
