@@ -156,14 +156,23 @@ instance MemRep Int16 where
 -- This needs a typelevel ZipWith (++), which we might be able to reuse from Fcf
 -- https://hackage.haskell.org/package/first-class-families-0.8.0.1
 
-instance MemRep (Either Int Int) where
-  type ChoiceTypes (Either Int Int) = '[RNS '[Finite 2]]
-  choices (Left x)  = Cons (RZ 0) Nil
-  choices (Right x) = Cons (RZ 1) Nil
+-- This thing won't typecheck
+-- The problem lies in the fact that we have to conjure up something that typechecks with the type of
+-- Left while we are in the Right branch, and vice versa
 
-  type FieldTypes (Either Int Int) = '[RNS '[Int, Int]]
-  fields (Left x)  = Cons (RZ x) Nil
-  fields (Right x) = Cons (RS $ RZ x) Nil
+-- instance (MemRep l, MemRep r) => MemRep (Either l r) where
+--   type ChoiceTypes (Either l r) = Eval ('[RNS '[Finite 2]] ++ Eval (ZipWith' (<>) (ChoiceTypes l) (ChoiceTypes r)))
+--   choices (Left x)  = case choices x of
+--     Cons x' Nil -> Cons (RZ 0) _
+--   choices (Right x) = case choices x of
+--     Cons x' xs -> Cons (RZ 1) _
+
+--   type FieldTypes (Either l r) = Eval (ZipWith' (<>) (FieldTypes l) (FieldTypes r))
+--   fields (Left x)  = case fields x of
+--     Nil         -> _
+--     Cons x' Nil -> _
+--   fields (Right x) = case fields x of
+--     Cons x' Nil -> _
 
 
 instance MemRep (Either Float Int) where
@@ -191,16 +200,14 @@ instance MemRep (Either (Either Float Int) (Either Int8 Int16)) where
   choices (Left x)  = case choices x of
     Cons (RZ x') Nil -> Cons (RZ 0) (Cons (RZ x') Nil)
   choices (Right x) = case choices x of
-    Cons (RZ x') Nil -> Cons (RZ 1) (Cons (RS $ RZ x') Nil)
+    Cons x' Nil -> Cons (RZ 1) (Cons (RS x') Nil)
 
   type FieldTypes (Either (Either Float Int) (Either Int8 Int16)) = '[RNS [Float, Int, Int8, Int16]]
   fields (Left x)  = case fields x of
     Cons (RZ x') Nil      -> Cons (RZ x') Nil
     Cons (RS (RZ x')) Nil -> Cons (RS $ RZ x') Nil
   fields (Right x) = case fields x of
-    Cons (RZ x') Nil      -> Cons (RS $ RS $ RZ x') Nil
-    Cons (RS (RZ x')) Nil -> Cons (RS $ RS $ RS $ RZ x') Nil
-
+    Cons x' Nil      -> Cons (RS $ RS x') Nil
 
 -- Instance for product types (tuples)
 -- Recursively defined, because concatenation is a whole lot easier then zipWith (++)
