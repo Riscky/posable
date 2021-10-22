@@ -98,6 +98,41 @@ instance IsRNS (RNS x) where
 proofRNSConcat :: RNSProof (RNS a </> RNS b)
 proofRNSConcat = Proof Refl
 
+-- takeLeft and takeRight version of rnsConcat
+-- We should probably merge them in a polymorphic thing (or even drop rnsConcat,
+-- since it is functionaly equivalent to applying zipLeft (or zipRight) on 2 empty values)
+zipLeft :: (All IsRNS l, All IsRNS r, All IsRNS (Eval (ZipWith' (<>) l r))) => Vector l -> Vector r -> Vector (Eval (ZipWith' (<>) l r))
+zipLeft (Cons (x :: a) xs) (Cons (y :: b) ys)
+  | Proof (Refl :: a :~: RNS a') <- proof @ a
+  , Proof (Refl :: b :~: RNS b') <- proof @ b
+  , Proof Refl <- proofRNSConcat @ a' @ b' = Cons (takeLeft x y) (rnsConcat xs ys)
+zipLeft Nil ys = ys
+zipLeft xs Nil = xs
+
+takeLeft :: RNS l -> RNS r -> RNS (Eval (l ++ r))
+takeLeft Empty  _ = Empty
+takeLeft (RZ x) _ = RZ x
+takeLeft (RS x) ys = RS (takeLeft x ys)
+
+zipRight :: (All IsRNS l, All IsRNS r, All IsRNS (Eval (ZipWith' (<>) l r))) => Vector l -> Vector r -> Vector (Eval (ZipWith' (<>) l r))
+zipRight (Cons (x :: a) xs) (Cons (y :: b) ys)
+  | Proof (Refl :: a :~: RNS a') <- proof @ a
+  , Proof (Refl :: b :~: RNS b') <- proof @ b
+  , Proof Refl <- proofRNSConcat @ a' @ b' = Cons (takeRight x y) (rnsConcat xs ys)
+zipRight Nil ys = ys
+zipRight xs Nil = xs
+
+-- It has proven to be quite hard to write a working instance for takeRight
+-- This is due to Empty in left, which makes it hard to know how many RS's have to be applied
+-- We might need to do some typeOf trickery:
+-- https://hackage.haskell.org/package/base-4.15.0.0/docs/Data-Typeable.html#v:typeOf
+-- But that requires runtime evaluation of types, which is not ideal
+-- Another idea might be to split RNS '[] and RNS (x':xs) into seperate instances
+-- of some class (probably IsRNS, since we already pass this constraint to zipRight)
+-- Anyhow, this is going to take a bit more work then zipLeft
+takeRight :: RNS l -> RNS r -> RNS (Eval (l ++ r))
+takeRight = undefined
+
 -----------------------------------------------------------------------
 -- MemRep, the king of this file
 class (All IsRNS (ChoiceTypes x), All IsRNS (FieldTypes x)) => MemRep x where
@@ -190,17 +225,12 @@ instance MemRep Int16 where
 
 instance (All IsRNS (ChoiceTypes (Either l r)), All IsRNS (FieldTypes (Either l r)), MemRep l, MemRep r) => MemRep (Either l r) where
   type ChoiceTypes (Either l r) = Eval ('[RNS '[Finite 2]] ++ Eval (ZipWith' (<>) (ChoiceTypes l) (ChoiceTypes r)))
-  choices (Left x)  = case choices x of
-    Cons x' Nil -> Cons (RZ 0) _
-  choices (Right x) = case choices x of
-    Cons x' xs -> Cons (RZ 1) _
+  choices (Left lv)  = Cons (RZ 0) (zipLeft (choices lv) (emptyChoices @ r))
+  choices (Right rv) = Cons (RZ 1) (zipRight (emptyChoices @ l) (choices rv))
 
   type FieldTypes (Either l r) = Eval (ZipWith' (<>) (FieldTypes l) (FieldTypes r))
-  fields (Left x)  = case fields x of
-    Nil         -> _
-    Cons x' Nil -> _
-  fields (Right x) = case fields x of
-    Cons x' Nil -> _
+  fields (Left lv)  = zipLeft (fields lv) (emptyFields @ r)
+  fields (Right rv) = zipRight (emptyFields @ l) (fields rv)
 
   widths = zipWith max (widths @ l) (widths @ r)
 
