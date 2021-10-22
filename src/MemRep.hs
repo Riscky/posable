@@ -233,6 +233,20 @@ instance MemRep Int16 where
 -----------------------------------------------------------------------
 -- Instances of MemRep that should be generically derived in the future
 
+-- Instance for Boolean
+instance MemRep Bool where
+  type ChoiceTypes Bool = '[RNS '[Finite 2]]
+  choices False = Cons (RZ 0) Nil
+  choices True  = Cons (RZ 1) Nil
+
+  type FieldTypes Bool = '[]
+  fields _ = Nil
+
+  widths = []
+
+  emptyChoices = Cons Empty Nil
+  emptyFields  = Nil
+
 -- Instance for Maybe
 instance (All IsRNS (ChoiceTypes (Maybe a)), All IsRNS (FieldTypes (Maybe a)), MemRep a) => MemRep (Maybe a) where
   type ChoiceTypes (Maybe a) = Eval ('[RNS '[Finite 2]] ++ ChoiceTypes a)
@@ -262,6 +276,31 @@ instance (All IsRNS (ChoiceTypes (Either l r)), All IsRNS (FieldTypes (Either l 
 
   emptyChoices = Cons Empty (rnsConcat (emptyChoices @ l) (emptyChoices @ r))
   emptyFields = rnsConcat (emptyFields @ l) (emptyFields @ r)
+
+-- Instance for Direction type
+instance (
+      All IsRNS (ChoiceTypes (Direction l m r))
+    , All IsRNS (Eval (ZipWith' (<>) (ChoiceTypes m) (ChoiceTypes r)))
+    , All IsRNS (FieldTypes (Direction l m r))
+    , All IsRNS (Eval (ZipWith' (<>) (FieldTypes m) (FieldTypes r)))
+    , MemRep l
+    , MemRep m
+    , MemRep r)
+    => MemRep (Direction l m r) where
+  type ChoiceTypes (Direction l m r) = Eval ('[RNS '[Finite 3]] ++ Eval (ZipWith' (<>) (ChoiceTypes l) (Eval (ZipWith' (<>) (ChoiceTypes m) (ChoiceTypes r)))))
+  choices (Lef lv) = Cons (RZ 0) (zipLeft  (choices lv)       (zipLeft  (emptyChoices @ m) (emptyChoices @ r)))
+  choices (Mid mv) = Cons (RZ 0) (zipRight (emptyChoices @ l) (zipLeft  (choices mv)       (emptyChoices @ r)))
+  choices (Rig rv) = Cons (RZ 0) (zipRight (emptyChoices @ l) (zipRight (emptyChoices @ m) (choices rv)))
+
+  type FieldTypes (Direction l m r) = Eval (ZipWith' (<>) (FieldTypes l) (Eval (ZipWith' (<>) (FieldTypes m) (FieldTypes r))))
+  fields (Lef lv) = zipLeft  (fields lv)       (zipLeft  (emptyFields @ m) (emptyFields @ r))
+  fields (Mid mv) = zipRight (emptyFields @ l) (zipLeft  (fields mv)       (emptyFields @ r))
+  fields (Rig rv) = zipRight (emptyFields @ l) (zipRight (emptyFields @ m) (fields rv))
+
+  widths = zipWith max (widths @ l) (zipWith max (widths @ m) (widths @ r))
+
+  emptyChoices = Cons Empty (rnsConcat (emptyChoices @ l) (rnsConcat (emptyChoices @ m) (emptyChoices @ r)))
+  emptyFields = rnsConcat (emptyFields @ l) (rnsConcat (emptyFields @ m) (emptyFields @ r))
 
 -- Instance for product types (tuples)
 -- Recursively defined, because concatenation is a whole lot easier then zipWith (++)
