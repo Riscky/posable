@@ -10,12 +10,15 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ExplicitForAll #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
 
 module MemRep where
 
 import Generics.SOP (All, All2, Code, Generic)
 import Data.Int (Int8, Int16, Int32, Int64)
 import Data.Finite.Internal (Finite)
+import Data.Type.Equality
 
 import Fcf
 
@@ -73,9 +76,31 @@ type instance Eval ((<>) x y) = x </> y
 type family (a :: *) </> (b :: *) :: * where
   RNS a </> RNS b = RNS (Eval (a ++ b))
 
+-- Value level implementation of ZipWith' (<>)
+rnsConcat :: (All IsRNS l, All IsRNS r, All IsRNS (Eval (ZipWith' (<>) l r))) => Vector l -> Vector r -> Vector (Eval (ZipWith' (<>) l r))
+rnsConcat (Cons (x :: a) xs) (Cons (y :: b) ys)
+  | Proof (Refl :: a :~: RNS a') <- proof @ a
+  , Proof (Refl :: b :~: RNS b') <- proof @ b
+  , Proof Refl <- proofRNSConcat @ a' @ b' = Cons Bottom (rnsConcat xs ys)
+rnsConcat Nil ys = ys
+rnsConcat xs Nil = xs
+
+-- Proofs to convice the compiler that ChoiceTypes and FieldTypes contain RNS's
+class IsRNS x where
+  proof :: RNSProof x
+
+data RNSProof x where
+  Proof :: x :~: RNS y -> RNSProof x
+
+instance IsRNS (RNS x) where
+  proof = Proof Refl
+
+proofRNSConcat :: RNSProof (RNS a </> RNS b)
+proofRNSConcat = Proof Refl
+
 -----------------------------------------------------------------------
 -- MemRep, the king of this file
-class MemRep x where
+class (All IsRNS (ChoiceTypes x), All IsRNS (FieldTypes x)) => MemRep x where
   type ChoiceTypes x :: [*]
   choices :: x -> Vector (ChoiceTypes x)
 
@@ -163,94 +188,33 @@ instance MemRep Int16 where
 -- The problem lies in the fact that we have to conjure up something that typechecks with the type of
 -- Left while we are in the Right branch, and vice versa
 
--- instance (MemRep l, MemRep r) => MemRep (Either l r) where
---   type ChoiceTypes (Either l r) = Eval ('[RNS '[Finite 2]] ++ Eval (ZipWith' (<>) (ChoiceTypes l) (ChoiceTypes r)))
---   choices (Left x)  = case choices x of
---     Cons x' Nil -> Cons (RZ 0) _
---   choices (Right x) = case choices x of
---     Cons x' xs -> Cons (RZ 1) _
-
---   type FieldTypes (Either l r) = Eval (ZipWith' (<>) (FieldTypes l) (FieldTypes r))
---   fields (Left x)  = case fields x of
---     Nil         -> _
---     Cons x' Nil -> _
---   fields (Right x) = case fields x of
---     Cons x' Nil -> _
-
---   -- This might help significantly in the definition of fields
---   -- and we might want to have something comparable for choices
---   -- To this point I have not been able to come up with a definition of <>
---   -- that typechecks however.
---   -- It should not be too difficult however, it's just a Vector with the right amount of Bottoms of the right type
---   choicesBottom = Cons Bottom (choicesBottom @ r <> choicesBottom @ l)
---   fieldsBottom = fieldsBottom @ r <> fieldsBottom @ l
-
-
-instance (MemRep x) => MemRep (Maybe x) where
-  type ChoiceTypes (Maybe x) = Eval ('[RNS '[Finite 2]] ++ ChoiceTypes x)
-  choices Nothing  = Cons (RZ 0) (choicesBottom @ x)
-  choices (Just x) = Cons (RZ 1) (choices x)
-
-  type FieldTypes (Maybe x) = FieldTypes x
-  fields Nothing  = fieldsBottom @ x
-  fields (Just x) = fields x
-
-  widths = zipWith max (widths @ Float) (widths @ Int)
-
-  fieldsBottom = fieldsBottom @ x
-  choicesBottom = Cons Bottom (choicesBottom @ x)
-
-instance MemRep (Either Float Int) where
-  type ChoiceTypes (Either Float Int) = '[RNS '[Finite 2]]
-  choices (Left x)  = Cons (RZ 0) Nil
-  choices (Right x) = Cons (RZ 1) Nil
-
-  type FieldTypes (Either Float Int) = '[RNS '[Float, Int]]
-  fields (Left x)  = Cons (RZ x) Nil
-  fields (Right x) = Cons (RS $ RZ x) Nil
-
-  widths = zipWith max (widths @ Float) (widths @ Int)
-
-  choicesBottom = Cons Bottom Nil
-  fieldsBottom = Cons Bottom Nil
-
-instance MemRep (Either Int8 Int16) where
-  type ChoiceTypes (Either Int8 Int16) = '[RNS '[Finite 2]]
-  choices (Left x)  = Cons (RZ 0) Nil
-  choices (Right x) = Cons (RZ 1) Nil
-
-  type FieldTypes (Either Int8 Int16) = '[RNS '[Int8, Int16]]
-  fields (Left x)  = Cons (RZ x) Nil
-  fields (Right x) = Cons (RS $ RZ x) Nil
-
-  widths = zipWith max (widths @ Int8) (widths @ Int16)
-
-  fieldsBottom = Cons Bottom Nil
-  choicesBottom = Cons Bottom Nil
-
-
-instance MemRep (Either (Either Float Int) (Either Int8 Int16)) where
-  type ChoiceTypes (Either (Either Float Int) (Either Int8 Int16)) = '[RNS '[Finite 2], RNS '[Finite 2, Finite 2]]
+instance (All IsRNS (ChoiceTypes (Either l r)), All IsRNS (FieldTypes (Either l r)), MemRep l, MemRep r) => MemRep (Either l r) where
+  type ChoiceTypes (Either l r) = Eval ('[RNS '[Finite 2]] ++ Eval (ZipWith' (<>) (ChoiceTypes l) (ChoiceTypes r)))
   choices (Left x)  = case choices x of
-    Cons (RZ x') Nil -> Cons (RZ 0) (Cons (RZ x') Nil)
+    Cons x' Nil -> Cons (RZ 0) _
   choices (Right x) = case choices x of
-    Cons x' Nil -> Cons (RZ 1) (Cons (RS x') Nil)
+    Cons x' xs -> Cons (RZ 1) _
 
-  type FieldTypes (Either (Either Float Int) (Either Int8 Int16)) = '[RNS [Float, Int, Int8, Int16]]
+  type FieldTypes (Either l r) = Eval (ZipWith' (<>) (FieldTypes l) (FieldTypes r))
   fields (Left x)  = case fields x of
-    Cons (RZ x') Nil      -> Cons (RZ x') Nil
-    Cons (RS (RZ x')) Nil -> Cons (RS $ RZ x') Nil
+    Nil         -> _
+    Cons x' Nil -> _
   fields (Right x) = case fields x of
-    Cons x' Nil      -> Cons (RS $ RS x') Nil
+    Cons x' Nil -> _
 
-  widths = zipWith max (widths @ (Either Float Int)) (widths @ (Either Int8 Int16))
+  widths = zipWith max (widths @ l) (widths @ r)
 
-  fieldsBottom = Cons Bottom Nil
-  choicesBottom = Cons Bottom (Cons Bottom Nil)
+  -- This might help significantly in the definition of fields
+  -- and we might want to have something comparable for choices
+  -- To this point I have not been able to come up with a definition of <>
+  -- that typechecks however.
+  -- It should not be too difficult however, it's just a Vector with the right amount of Bottoms of the right type
+  choicesBottom = Cons Bottom (rnsConcat (choicesBottom @ l) (choicesBottom @ r))
+  fieldsBottom = rnsConcat (fieldsBottom @ l) (fieldsBottom @ r)
 
 -- Instance for product types (tuples)
 -- Recursively defined, because concatenation is a whole lot easier then zipWith (++)
-instance (MemRep x, MemRep y) => MemRep (x, y) where
+instance (All IsRNS (ChoiceTypes (x,y)), All IsRNS (FieldTypes (x,y)), MemRep x, MemRep y) => MemRep (x, y) where
   type ChoiceTypes (x,y) = Eval (ChoiceTypes x ++ ChoiceTypes y)
   choices (x,y) = rvconcat (choices x) (choices y)
 
