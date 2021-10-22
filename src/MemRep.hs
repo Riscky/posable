@@ -30,7 +30,7 @@ data Vector xs where
 
 instance (All Show xs) =>  Show (Vector xs) where
   show Nil = "[]"
-  show (Cons a as) = show a ++ ":" ++ show as
+  show (Cons a as) = show a ++ " : " ++ show as
 
 -- concat for Vectors
 -- could (should) be a Semigroup instance (<>)
@@ -39,16 +39,16 @@ rvconcat Nil         ys = ys
 rvconcat (Cons x xs) ys = Cons x (rvconcat xs ys)
 
 -----------------------------------------------------------------------
--- Typelevel sums with a bottom value
+-- Typelevel sums with a empty value
 data RNS :: [*] -> * where
   RZ :: x -> RNS (x ': xs)
   RS :: RNS xs -> RNS (x ': xs)
-  Bottom :: RNS xs
+  Empty :: RNS xs
 
 instance (All Show x) => Show (RNS x) where
   show (RZ x) = show x
   show (RS x) = show x
-  show Bottom = "_|_"
+  show Empty = "Ø"
 
 -- stolen from https://hackage.haskell.org/package/first-class-families-0.8.0.1
 -- and adapted to keep the length of the longest list
@@ -81,7 +81,7 @@ rnsConcat :: (All IsRNS l, All IsRNS r, All IsRNS (Eval (ZipWith' (<>) l r))) =>
 rnsConcat (Cons (x :: a) xs) (Cons (y :: b) ys)
   | Proof (Refl :: a :~: RNS a') <- proof @ a
   , Proof (Refl :: b :~: RNS b') <- proof @ b
-  , Proof Refl <- proofRNSConcat @ a' @ b' = Cons Bottom (rnsConcat xs ys)
+  , Proof Refl <- proofRNSConcat @ a' @ b' = Cons Empty (rnsConcat xs ys)
 rnsConcat Nil ys = ys
 rnsConcat xs Nil = xs
 
@@ -109,8 +109,8 @@ class (All IsRNS (ChoiceTypes x), All IsRNS (FieldTypes x)) => MemRep x where
 
   widths :: [Int]
 
-  choicesBottom :: Vector (ChoiceTypes x)
-  fieldsBottom :: Vector (FieldTypes x)
+  emptyChoices :: Vector (ChoiceTypes x)
+  emptyFields :: Vector (FieldTypes x)
 
 -----------------------------------------------------------------------
 -- Instances of MemRep for machine types
@@ -140,8 +140,8 @@ instance MemRep Int where
 
   widths = [32]
 
-  choicesBottom = Nil
-  fieldsBottom = Cons Bottom Nil
+  emptyChoices = Nil
+  emptyFields = Cons Empty Nil
 
 instance MemRep Float where
   type ChoiceTypes Float = '[]
@@ -152,8 +152,8 @@ instance MemRep Float where
 
   widths = [32]
 
-  choicesBottom = Nil
-  fieldsBottom = Cons Bottom Nil
+  emptyChoices = Nil
+  emptyFields = Cons Empty Nil
 
 instance MemRep Int8 where
   type ChoiceTypes Int8 = '[]
@@ -164,8 +164,8 @@ instance MemRep Int8 where
 
   widths = [8]
 
-  choicesBottom = Nil
-  fieldsBottom = Cons Bottom Nil
+  emptyChoices = Nil
+  emptyFields = Cons Empty Nil
 
 instance MemRep Int16 where
   type ChoiceTypes Int16 = '[]
@@ -176,8 +176,8 @@ instance MemRep Int16 where
 
   widths = [16]
 
-  choicesBottom = Nil
-  fieldsBottom = Cons Bottom Nil
+  emptyChoices = Nil
+  emptyFields = Cons Empty Nil
 
 -----------------------------------------------------------------------
 -- Instances of MemRep that should be generically derived in the future
@@ -208,9 +208,9 @@ instance (All IsRNS (ChoiceTypes (Either l r)), All IsRNS (FieldTypes (Either l 
   -- and we might want to have something comparable for choices
   -- To this point I have not been able to come up with a definition of <>
   -- that typechecks however.
-  -- It should not be too difficult however, it's just a Vector with the right amount of Bottoms of the right type
-  choicesBottom = Cons Bottom (rnsConcat (choicesBottom @ l) (choicesBottom @ r))
-  fieldsBottom = rnsConcat (fieldsBottom @ l) (fieldsBottom @ r)
+  -- It should not be too difficult however, it's just a Vector with the right amount of Empty's of the right type
+  emptyChoices = Cons Empty (rnsConcat (emptyChoices @ l) (emptyChoices @ r))
+  emptyFields = rnsConcat (emptyFields @ l) (emptyFields @ r)
 
 -- Instance for product types (tuples)
 -- Recursively defined, because concatenation is a whole lot easier then zipWith (++)
@@ -223,5 +223,5 @@ instance (All IsRNS (ChoiceTypes (x,y)), All IsRNS (FieldTypes (x,y)), MemRep x,
 
   widths = widths @ x ++ widths @ y
 
-  choicesBottom = rvconcat (choicesBottom @ x) (choicesBottom @ y)
-  fieldsBottom = rvconcat (fieldsBottom @ x) (fieldsBottom @ y)
+  emptyChoices = rvconcat (emptyChoices @ x) (emptyChoices @ y)
+  emptyFields = rvconcat (emptyFields @ x) (emptyFields @ y)
