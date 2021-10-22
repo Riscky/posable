@@ -89,11 +89,26 @@ rnsConcat xs Nil = xs
 class IsRNS x where
   proof :: RNSProof x
 
+  -- It has proven to be quite hard to write a working instance for takeRight
+  -- This is due to Empty in left, which makes it hard to know how many RS's have to be applied
+  -- We could have done some typeOf trickery:
+  -- https://hackage.haskell.org/package/base-4.15.0.0/docs/Data-Typeable.html#v:typeOf
+  -- but that requires runtime evaluation of types, which is not ideal
+  -- We now split RNS '[] and RNS (x':xs) into seperate instances of IsRNS,
+  -- since we already have to pass this constraint to zipRight anyhow
+  -- It seems a bit out of place maybe, but this keeps things simpler in other places
+  takeRight :: (x ~ RNS l) => RNS l -> RNS r -> RNS (Eval (l ++ r))
+
+instance IsRNS (RNS '[]) where
+  proof = Proof Refl
+  takeRight _ ys = ys
+
+instance (IsRNS (RNS xs)) => IsRNS (RNS (x:xs)) where
+  proof = Proof Refl
+  takeRight (a :: RNS (x:xs)) (ys :: RNS r) = RS (takeRight (Empty :: RNS xs) ys :: (RNS (Eval (xs ++ r))))
+
 data RNSProof x where
   Proof :: x :~: RNS y -> RNSProof x
-
-instance IsRNS (RNS x) where
-  proof = Proof Refl
 
 proofRNSConcat :: RNSProof (RNS a </> RNS b)
 proofRNSConcat = Proof Refl
@@ -121,17 +136,6 @@ zipRight (Cons (x :: a) xs) (Cons (y :: b) ys)
   , Proof Refl <- proofRNSConcat @ a' @ b' = Cons (takeRight x y) (rnsConcat xs ys)
 zipRight Nil ys = ys
 zipRight xs Nil = xs
-
--- It has proven to be quite hard to write a working instance for takeRight
--- This is due to Empty in left, which makes it hard to know how many RS's have to be applied
--- We might need to do some typeOf trickery:
--- https://hackage.haskell.org/package/base-4.15.0.0/docs/Data-Typeable.html#v:typeOf
--- But that requires runtime evaluation of types, which is not ideal
--- Another idea might be to split RNS '[] and RNS (x':xs) into seperate instances
--- of some class (probably IsRNS, since we already pass this constraint to zipRight)
--- Anyhow, this is going to take a bit more work then zipLeft
-takeRight :: RNS l -> RNS r -> RNS (Eval (l ++ r))
-takeRight = undefined
 
 -----------------------------------------------------------------------
 -- MemRep, the king of this file
