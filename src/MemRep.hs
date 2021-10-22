@@ -151,6 +151,18 @@ class (All IsRNS (ChoiceTypes x), All IsRNS (FieldTypes x)) => MemRep x where
   emptyChoices :: Vector (ChoiceTypes x)
   emptyFields :: Vector (FieldTypes x)
 
+
+------------------------------------------------------------------------
+-- Some types to gain understanding of MemRep instances for more complex
+-- types
+
+data Direction l m r = Lef l
+                     | Mid m
+                     | Rig r
+
+data Mult a b c d = Fst a b
+                  | Snd c d
+
 -----------------------------------------------------------------------
 -- Instances of MemRep for machine types
 
@@ -220,13 +232,23 @@ instance MemRep Int16 where
 
 -----------------------------------------------------------------------
 -- Instances of MemRep that should be generically derived in the future
--- This needs a typelevel ZipWith (++), which we might be able to reuse from Fcf
--- https://hackage.haskell.org/package/first-class-families-0.8.0.1
 
--- This thing won't typecheck
--- The problem lies in the fact that we have to conjure up something that typechecks with the type of
--- Left while we are in the Right branch, and vice versa
+-- Instance for Maybe
+instance (All IsRNS (ChoiceTypes (Maybe a)), All IsRNS (FieldTypes (Maybe a)), MemRep a) => MemRep (Maybe a) where
+  type ChoiceTypes (Maybe a) = Eval ('[RNS '[Finite 2]] ++ ChoiceTypes a)
+  choices Nothing  = Cons (RZ 0) (emptyChoices @ a)
+  choices (Just x) = Cons (RZ 1) (choices x)
 
+  type FieldTypes (Maybe a) = FieldTypes a
+  fields Nothing  = emptyFields @ a
+  fields (Just x) = fields x
+
+  widths = widths @ a
+
+  emptyChoices = Cons Empty (emptyChoices @ a)
+  emptyFields  = emptyFields @ a
+
+-- Instance for Either, recursively defined
 instance (All IsRNS (ChoiceTypes (Either l r)), All IsRNS (FieldTypes (Either l r)), MemRep l, MemRep r) => MemRep (Either l r) where
   type ChoiceTypes (Either l r) = Eval ('[RNS '[Finite 2]] ++ Eval (ZipWith' (<>) (ChoiceTypes l) (ChoiceTypes r)))
   choices (Left lv)  = Cons (RZ 0) (zipLeft (choices lv) (emptyChoices @ r))
@@ -238,11 +260,6 @@ instance (All IsRNS (ChoiceTypes (Either l r)), All IsRNS (FieldTypes (Either l 
 
   widths = zipWith max (widths @ l) (widths @ r)
 
-  -- This might help significantly in the definition of fields
-  -- and we might want to have something comparable for choices
-  -- To this point I have not been able to come up with a definition of <>
-  -- that typechecks however.
-  -- It should not be too difficult however, it's just a Vector with the right amount of Empty's of the right type
   emptyChoices = Cons Empty (rnsConcat (emptyChoices @ l) (emptyChoices @ r))
   emptyFields = rnsConcat (emptyFields @ l) (emptyFields @ r)
 
@@ -259,3 +276,16 @@ instance (All IsRNS (ChoiceTypes (x,y)), All IsRNS (FieldTypes (x,y)), MemRep x,
 
   emptyChoices = rvconcat (emptyChoices @ x) (emptyChoices @ y)
   emptyFields = rvconcat (emptyFields @ x) (emptyFields @ y)
+
+-- Instance for 3-tuples
+instance (All IsRNS (ChoiceTypes (x,y,z)), All IsRNS (FieldTypes (x,y,z)), MemRep x, MemRep y, MemRep z) => MemRep (x, y, z) where
+  type ChoiceTypes (x,y,z) = Eval (ChoiceTypes x ++ Eval (ChoiceTypes y ++ ChoiceTypes z))
+  choices (x,y,z) = rvconcat (choices x) $ rvconcat (choices y) (choices z)
+
+  type FieldTypes (x,y,z) = Eval (FieldTypes x ++ Eval (FieldTypes y ++ FieldTypes z))
+  fields (x,y,z) = rvconcat (fields x) $ rvconcat (fields y) (fields z)
+
+  widths = widths @ x ++ widths @ y ++ widths @ z
+
+  emptyChoices = rvconcat (emptyChoices @ x) $ rvconcat (emptyChoices @ y) (emptyChoices @ z)
+  emptyFields = rvconcat (emptyFields @ x) $ rvconcat (emptyFields @ y) (emptyFields @ z)
