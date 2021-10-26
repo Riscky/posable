@@ -10,7 +10,6 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE ExplicitForAll #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
 
 module MemRep where
