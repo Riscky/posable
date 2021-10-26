@@ -289,8 +289,8 @@ instance (
     => MemRep (Direction l m r) where
   type ChoiceTypes (Direction l m r) = Eval ('[RNS '[Finite 3]] ++ Eval (ZipWith' (<>) (ChoiceTypes l) (Eval (ZipWith' (<>) (ChoiceTypes m) (ChoiceTypes r)))))
   choices (Lef lv) = Cons (RZ 0) (zipLeft  (choices lv)       (zipLeft  (emptyChoices @ m) (emptyChoices @ r)))
-  choices (Mid mv) = Cons (RZ 0) (zipRight (emptyChoices @ l) (zipLeft  (choices mv)       (emptyChoices @ r)))
-  choices (Rig rv) = Cons (RZ 0) (zipRight (emptyChoices @ l) (zipRight (emptyChoices @ m) (choices rv)))
+  choices (Mid mv) = Cons (RZ 1) (zipRight (emptyChoices @ l) (zipLeft  (choices mv)       (emptyChoices @ r)))
+  choices (Rig rv) = Cons (RZ 2) (zipRight (emptyChoices @ l) (zipRight (emptyChoices @ m) (choices rv)))
 
   type FieldTypes (Direction l m r) = Eval (ZipWith' (<>) (FieldTypes l) (Eval (ZipWith' (<>) (FieldTypes m) (FieldTypes r))))
   fields (Lef lv) = zipLeft  (fields lv)       (zipLeft  (emptyFields @ m) (emptyFields @ r))
@@ -301,6 +301,33 @@ instance (
 
   emptyChoices = Cons Empty (rnsConcat (emptyChoices @ l) (rnsConcat (emptyChoices @ m) (emptyChoices @ r)))
   emptyFields = rnsConcat (emptyFields @ l) (rnsConcat (emptyFields @ m) (emptyFields @ r))
+
+
+-- Instance for Mult type
+instance (
+      All IsRNS (ChoiceTypes (Mult a b c d))
+    , All IsRNS (Eval (ChoiceTypes a ++ ChoiceTypes b))
+    , All IsRNS (Eval (ChoiceTypes c ++ ChoiceTypes d))
+    , All IsRNS (FieldTypes (Mult a b c d))
+    , All IsRNS (Eval (FieldTypes a ++ FieldTypes b))
+    , All IsRNS (Eval (FieldTypes c ++ FieldTypes d))
+    , MemRep a
+    , MemRep b
+    , MemRep c
+    , MemRep d)
+    => MemRep (Mult a b c d) where
+  type ChoiceTypes (Mult a b c d) = Eval ('[RNS '[Finite 2]] ++ Eval (ZipWith' (<>) (Eval (ChoiceTypes a ++ ChoiceTypes b)) (Eval (ChoiceTypes c ++ ChoiceTypes d))))
+  choices (Fst av bv) = Cons (RZ 0) (zipLeft (rvconcat (choices av) (choices bv)) (rvconcat (emptyChoices @ c) (emptyChoices @ d)))
+  choices (Snd cv dv) = Cons (RZ 1) (zipRight (rvconcat (emptyChoices @ a) (emptyChoices @ b)) (rvconcat (choices cv) (choices dv)))
+
+  type FieldTypes (Mult a b c d) = Eval (ZipWith' (<>) (Eval (FieldTypes a ++ FieldTypes b)) (Eval (FieldTypes c ++ FieldTypes d)))
+  fields (Fst av bv) = zipLeft (rvconcat (fields av) (fields bv)) (rvconcat (emptyFields @ c) (emptyFields @ d))
+  fields (Snd cv dv) = zipRight (rvconcat (emptyFields @ a) (emptyFields @ b)) (rvconcat (fields cv) (fields dv))
+
+  widths = zipWith max (widths @ a ++ widths @ b) (widths @ c ++ widths @ d)
+
+  emptyChoices = Cons Empty (rnsConcat (rvconcat (emptyChoices @ a) (emptyChoices @ b)) (rvconcat (emptyChoices @ c) (emptyChoices @ d)))
+  emptyFields = rnsConcat (rvconcat (emptyFields @ a) (emptyFields @ b)) (rvconcat (emptyFields @ c) (emptyFields @ d))
 
 -- Instance for product types (tuples)
 -- Recursively defined, because concatenation is a whole lot easier then zipWith (++)
