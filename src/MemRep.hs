@@ -11,15 +11,33 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DefaultSignatures #-}
 
 module MemRep where
 
-import Generics.SOP (All, All2, Code, Generic)
+import Generics.SOP
+    ( All,
+      All2,
+      Code,
+      Generic,
+      All,
+      All2,
+      Code,
+      Generic,
+      I(I),
+      SOP(SOP),
+      NS(Z, S),
+      NP((:*)),
+      from )
 import Data.Int (Int8, Int16, Int32, Int64)
 import Data.Finite.Internal (Finite)
 import Data.Type.Equality
 
 import Fcf
+
+import qualified GHC.Generics as GHC
+import qualified Generics.SOP as SOP
 
 -----------------------------------------------------------------------
 -- Heterogeneous lists with explicit types
@@ -140,16 +158,46 @@ zipRight xs Nil = xs
 -- MemRep, the king of this file
 class (All IsRNS (ChoiceTypes x), All IsRNS (FieldTypes x)) => MemRep x where
   type ChoiceTypes x :: [*]
+  type ChoiceTypes x = GChoiceTypes (SOP I (Code x))
+
   choices :: x -> Vector (ChoiceTypes x)
 
+  default choices ::
+    ( Generic x
+    , ChoiceTypes x ~ GChoiceTypes (SOP I (Code x))
+    , GMemRep (SOP I (Code x))
+    ) => x -> Vector (ChoiceTypes x)
+  choices x = gchoices $ from x
+
   type FieldTypes x :: [*]
+  type FieldTypes x = GFieldTypes (SOP I (Code x))
+
   fields :: x -> Vector (FieldTypes x)
+
+  default fields ::
+    ( Generic x
+    , FieldTypes x ~ GFieldTypes (SOP I (Code x))
+    , GMemRep (SOP I (Code x))
+    ) => x -> Vector (FieldTypes x)
+  fields x = gfields $ from x
 
   widths :: [Int]
 
   emptyChoices :: Vector (ChoiceTypes x)
+
+  default emptyChoices ::
+    ( GMemRep (SOP I (Code x))
+    , ChoiceTypes x ~ GChoiceTypes (SOP I (Code x))
+    ) => Vector (ChoiceTypes x)
+  emptyChoices = gemptyChoices @ (SOP I (Code x))
+
   emptyFields :: Vector (FieldTypes x)
 
+  default emptyFields ::
+    ( GMemRep (SOP I (Code x))
+    , FieldTypes x ~ GFieldTypes (SOP I (Code x))
+    ) => Vector (FieldTypes x)
+  emptyFields  = gemptyFields @ (SOP I (Code x))
 
 ------------------------------------------------------------------------
 -- Some types to gain understanding of MemRep instances for more complex
@@ -354,3 +402,57 @@ instance (All IsRNS (ChoiceTypes (x,y,z)), All IsRNS (FieldTypes (x,y,z)), MemRe
 
   emptyChoices = rvconcat (emptyChoices @ x) $ rvconcat (emptyChoices @ y) (emptyChoices @ z)
   emptyFields = rvconcat (emptyFields @ x) $ rvconcat (emptyFields @ y) (emptyFields @ z)
+
+--------------------------------------------------------------
+-- Generics
+
+-----------------------------------------------------------------------
+-- GMemRep, the serf of this file
+class (All IsRNS (GChoiceTypes x), All IsRNS (GFieldTypes x)) => GMemRep x where
+  type GChoiceTypes x :: [*]
+  gchoices :: x -> Vector (GChoiceTypes x)
+
+  type GFieldTypes x :: [*]
+  gfields :: x -> Vector (GFieldTypes x)
+
+  gemptyChoices :: Vector (GChoiceTypes x)
+  gemptyFields :: Vector (GFieldTypes x)
+
+-- Instance for Either-like types
+instance (All IsRNS (GChoiceTypes (SOP I '[ '[l], '[r]])), All IsRNS (GFieldTypes (SOP I '[ '[l], '[r]])), MemRep l, MemRep r) => GMemRep (SOP I '[ '[l], '[r]]) where
+  type GChoiceTypes (SOP I '[ '[l], '[r]]) =  Eval ('[RNS '[Finite 2]] ++ Eval (ZipWith' (<>) (ChoiceTypes l) (ChoiceTypes r)))
+  gchoices (SOP (Z (I lv :* SOP.Nil)))     = Cons (RZ 0) (zipLeft (choices lv) (emptyChoices @ r))
+  gchoices (SOP (S (Z (I rv :* SOP.Nil)))) = Cons (RZ 1) (zipRight (emptyChoices @ l) (choices rv))
+
+  type GFieldTypes (SOP I '[ '[l], '[r]]) = Eval (ZipWith' (<>) (FieldTypes l) (FieldTypes r))
+  gfields (SOP (Z (I lv :* SOP.Nil)))     = zipLeft  (fields lv)       (emptyFields @ r)
+  gfields (SOP (S (Z (I rv :* SOP.Nil)))) = zipRight (emptyFields @ l) (fields rv)
+
+  gemptyChoices = Cons Empty (rnsConcat (emptyChoices @ l) (emptyChoices @ r))
+  gemptyFields = rnsConcat (emptyFields @ l) (emptyFields @ r)
+
+-- Instance for Tuple-like types
+instance (All IsRNS (GChoiceTypes (SOP I '[ '[a, b]])), All IsRNS (GFieldTypes (SOP I '[ '[a, b]])), MemRep a, MemRep b) => GMemRep (SOP I '[ '[a, b]]) where
+  type GChoiceTypes (SOP I '[ '[a, b]]) = Eval (ChoiceTypes a ++ ChoiceTypes b)
+  -- Non-exhaustive pattern match? Nope, there are no inhabitants of SOP (S x)
+  -- This issue arises for any GMemRep (SOP I xs) instance (afaik)
+  gchoices (SOP (Z (I av :* I bv :* SOP.Nil))) = rvconcat (choices av) (choices bv)
+
+  type GFieldTypes (SOP I '[ '[a, b]]) = Eval (FieldTypes a ++ FieldTypes b)
+  gfields (SOP (Z (I av :* I bv :* SOP.Nil))) = rvconcat (fields av) (fields bv)
+
+  gemptyChoices = rvconcat (emptyChoices @ a) (emptyChoices @ b)
+  gemptyFields = rvconcat (emptyFields @ a) (emptyFields @ b)
+
+-- either equivalent type:
+data Try a b = Som a | Oth b
+             deriving (GHC.Generic)
+
+instance Generic (Try a b)
+
+instance
+  ( MemRep a
+  , MemRep b
+  , All IsRNS (ChoiceTypes (Try a b))
+  , All IsRNS (FieldTypes (Try a b))
+  ) => MemRep (Try a b)

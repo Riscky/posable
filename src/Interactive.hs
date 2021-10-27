@@ -1,7 +1,6 @@
 
 module Interactive where
 
-import Generics
 import MemRep
 import Generics.SOP
 import qualified Generics.SOP as SOP

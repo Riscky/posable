@@ -8,3 +8,4 @@ List of things that should or could be done:
 - Choose a better append operator for RNS
 - Figure out how overlapping instances work and simplify our MemRep BaseType instances (and maybe IsRNS)
 - Rewrite widths to a function over a MemRep instead of a function in the class itself
+- Check Finite's on compile time (probably need some reification there)
