@@ -13,6 +13,7 @@
 {-# LANGUAGE UndecidableSuperClasses #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module MemRep where
 
@@ -446,9 +447,7 @@ instance (All IsRNS (GChoiceTypes (SOP I '[ '[a, b]])), All IsRNS (GFieldTypes (
 
 -- either equivalent type:
 data Try a b = Som a | Oth b
-             deriving (GHC.Generic)
-
-instance Generic (Try a b)
+             deriving (GHC.Generic, Generic)
 
 instance
   ( MemRep a
