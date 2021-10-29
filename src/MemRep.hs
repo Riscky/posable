@@ -33,7 +33,6 @@ import Generics.SOP
       from )
 import Data.Int (Int8, Int16, Int32, Int64)
 import Data.Finite.Internal (Finite)
-import Data.Type.Equality
 
 import Fcf
 
@@ -44,7 +43,7 @@ import qualified Generics.SOP as SOP
 -- Heterogeneous lists with explicit types
 data Vector xs where
   Nil :: Vector '[]
-  Cons :: x -> Vector ys -> Vector (x ': ys)
+  Cons :: (x ~ RNS a) => x -> Vector ys -> Vector (x ': ys)
 
 instance (All Show xs) =>  Show (Vector xs) where
   show Nil = "[]"
@@ -95,50 +94,37 @@ type family (a :: *) </> (b :: *) :: * where
   RNS a </> RNS b = RNS (Eval (a ++ b))
 
 -- Value level implementation of ZipWith' (<>)
-rnsConcat :: (All IsRNS l, All IsRNS r, All IsRNS (Eval (ZipWith' (<>) l r))) => Vector l -> Vector r -> Vector (Eval (ZipWith' (<>) l r))
-rnsConcat (Cons (x :: a) xs) (Cons (y :: b) ys)
-  | Proof (Refl :: a :~: RNS a') <- proof @ a
-  , Proof (Refl :: b :~: RNS b') <- proof @ b
-  , Proof Refl <- proofRNSConcat @ a' @ b' = Cons Empty (rnsConcat xs ys)
+rnsConcat :: Vector l -> Vector r -> Vector (Eval (ZipWith' (<>) l r))
+rnsConcat (Cons (x :: RNS a) xs) (Cons (y :: RNS b) ys) = Cons Empty (rnsConcat xs ys)
 rnsConcat Nil ys = ys
 rnsConcat xs Nil = xs
 
 -- Proofs to convice the compiler that ChoiceTypes and FieldTypes contain RNS's
 class IsRNS x where
-  proof :: RNSProof x
-
   -- It has proven to be quite hard to write a working instance for takeRight
   -- This is due to Empty in left, which makes it hard to know how many RS's have to be applied
   -- We could have done some typeOf trickery:
   -- https://hackage.haskell.org/package/base-4.15.0.0/docs/Data-Typeable.html#v:typeOf
   -- but that requires runtime evaluation of types, which is not ideal
-  -- We now split RNS '[] and RNS (x':xs) into seperate instances of IsRNS,
-  -- since we already have to pass this constraint to zipRight anyhow
-  -- It seems a bit out of place maybe, but this keeps things simpler in other places
+  -- We now split RNS '[] and RNS (x':xs) into seperate instances of IsRNS
   takeRight :: (x ~ RNS l) => RNS l -> RNS r -> RNS (Eval (l ++ r))
 
-instance IsRNS (RNS '[]) where
-  proof = Proof Refl
+-- This brings the IsRNS constraint in scope for all RNS x
+-- We don't need a definition of takeRight because the instances (IsRNS '[]) and (IsRNS (x:xs))
+-- together cover all possible values of RNS
+instance {-# OVERLAPPABLE #-} IsRNS (RNS x) where
+
+instance {-# OVERLAPPING #-} IsRNS (RNS '[]) where
   takeRight _ ys = ys
 
-instance (IsRNS (RNS xs)) => IsRNS (RNS (x:xs)) where
-  proof = Proof Refl
+instance {-# OVERLAPPING #-} (IsRNS (RNS xs)) => IsRNS (RNS (x:xs)) where
   takeRight (a :: RNS (x:xs)) (ys :: RNS r) = RS (takeRight (Empty :: RNS xs) ys :: (RNS (Eval (xs ++ r))))
-
-data RNSProof x where
-  Proof :: x :~: RNS y -> RNSProof x
-
-proofRNSConcat :: RNSProof (RNS a </> RNS b)
-proofRNSConcat = Proof Refl
 
 -- takeLeft and takeRight version of rnsConcat
 -- We should probably merge them in a polymorphic thing (or even drop rnsConcat,
 -- since it is functionaly equivalent to applying zipLeft (or zipRight) on 2 empty values)
-zipLeft :: (All IsRNS l, All IsRNS r, All IsRNS (Eval (ZipWith' (<>) l r))) => Vector l -> Vector r -> Vector (Eval (ZipWith' (<>) l r))
-zipLeft (Cons (x :: a) xs) (Cons (y :: b) ys)
-  | Proof (Refl :: a :~: RNS a') <- proof @ a
-  , Proof (Refl :: b :~: RNS b') <- proof @ b
-  , Proof Refl <- proofRNSConcat @ a' @ b' = Cons (takeLeft x y) (rnsConcat xs ys)
+zipLeft :: Vector l -> Vector r -> Vector (Eval (ZipWith' (<>) l r))
+zipLeft (Cons (x :: a) xs) (Cons (y :: b) ys) = Cons (takeLeft x y) (rnsConcat xs ys)
 zipLeft Nil ys = ys
 zipLeft xs Nil = xs
 
@@ -147,17 +133,14 @@ takeLeft Empty  _ = Empty
 takeLeft (RZ x) _ = RZ x
 takeLeft (RS x) ys = RS (takeLeft x ys)
 
-zipRight :: (All IsRNS l, All IsRNS r, All IsRNS (Eval (ZipWith' (<>) l r))) => Vector l -> Vector r -> Vector (Eval (ZipWith' (<>) l r))
-zipRight (Cons (x :: a) xs) (Cons (y :: b) ys)
-  | Proof (Refl :: a :~: RNS a') <- proof @ a
-  , Proof (Refl :: b :~: RNS b') <- proof @ b
-  , Proof Refl <- proofRNSConcat @ a' @ b' = Cons (takeRight x y) (rnsConcat xs ys)
+zipRight :: Vector l -> Vector r -> Vector (Eval (ZipWith' (<>) l r))
+zipRight (Cons (x :: RNS a) xs) (Cons (y :: b) ys) = Cons (takeRight x y) (zipRight xs ys)
 zipRight Nil ys = ys
 zipRight xs Nil = xs
 
 -----------------------------------------------------------------------
 -- MemRep, the king of this file
-class (All IsRNS (ChoiceTypes x), All IsRNS (FieldTypes x)) => MemRep x where
+class MemRep x where
   type ChoiceTypes x :: [*]
   type ChoiceTypes x = GChoiceTypes (SOP I (Code x))
 
@@ -296,7 +279,7 @@ instance MemRep Bool where
   emptyFields  = Nil
 
 -- Instance for Maybe
-instance (All IsRNS (ChoiceTypes (Maybe a)), All IsRNS (FieldTypes (Maybe a)), MemRep a) => MemRep (Maybe a) where
+instance (MemRep a) => MemRep (Maybe a) where
   type ChoiceTypes (Maybe a) = Eval ('[RNS '[Finite 2]] ++ ChoiceTypes a)
   choices Nothing  = Cons (RZ 0) (emptyChoices @ a)
   choices (Just x) = Cons (RZ 1) (choices x)
@@ -311,7 +294,7 @@ instance (All IsRNS (ChoiceTypes (Maybe a)), All IsRNS (FieldTypes (Maybe a)), M
   emptyFields  = emptyFields @ a
 
 -- Instance for Either, recursively defined
-instance (All IsRNS (ChoiceTypes (Either l r)), All IsRNS (FieldTypes (Either l r)), MemRep l, MemRep r) => MemRep (Either l r) where
+instance (MemRep l, MemRep r) => MemRep (Either l r) where
   type ChoiceTypes (Either l r) = Eval ('[RNS '[Finite 2]] ++ Eval (ZipWith' (<>) (ChoiceTypes l) (ChoiceTypes r)))
   choices (Left lv)  = Cons (RZ 0) (zipLeft (choices lv) (emptyChoices @ r))
   choices (Right rv) = Cons (RZ 1) (zipRight (emptyChoices @ l) (choices rv))
@@ -326,12 +309,8 @@ instance (All IsRNS (ChoiceTypes (Either l r)), All IsRNS (FieldTypes (Either l 
   emptyFields = rnsConcat (emptyFields @ l) (emptyFields @ r)
 
 -- Instance for Direction type
-instance (
-      All IsRNS (ChoiceTypes (Direction l m r))
-    , All IsRNS (Eval (ZipWith' (<>) (ChoiceTypes m) (ChoiceTypes r)))
-    , All IsRNS (FieldTypes (Direction l m r))
-    , All IsRNS (Eval (ZipWith' (<>) (FieldTypes m) (FieldTypes r)))
-    , MemRep l
+instance
+    ( MemRep l
     , MemRep m
     , MemRep r)
     => MemRep (Direction l m r) where
@@ -352,14 +331,8 @@ instance (
 
 
 -- Instance for Mult type
-instance (
-      All IsRNS (ChoiceTypes (Mult a b c d))
-    , All IsRNS (Eval (ChoiceTypes a ++ ChoiceTypes b))
-    , All IsRNS (Eval (ChoiceTypes c ++ ChoiceTypes d))
-    , All IsRNS (FieldTypes (Mult a b c d))
-    , All IsRNS (Eval (FieldTypes a ++ FieldTypes b))
-    , All IsRNS (Eval (FieldTypes c ++ FieldTypes d))
-    , MemRep a
+instance
+    ( MemRep a
     , MemRep b
     , MemRep c
     , MemRep d)
@@ -379,7 +352,7 @@ instance (
 
 -- Instance for product types (tuples)
 -- Recursively defined, because concatenation is a whole lot easier then zipWith (++)
-instance (All IsRNS (ChoiceTypes (x,y)), All IsRNS (FieldTypes (x,y)), MemRep x, MemRep y) => MemRep (x, y) where
+instance (MemRep x, MemRep y) => MemRep (x, y) where
   type ChoiceTypes (x,y) = Eval (ChoiceTypes x ++ ChoiceTypes y)
   choices (x,y) = rvconcat (choices x) (choices y)
 
@@ -392,7 +365,7 @@ instance (All IsRNS (ChoiceTypes (x,y)), All IsRNS (FieldTypes (x,y)), MemRep x,
   emptyFields = rvconcat (emptyFields @ x) (emptyFields @ y)
 
 -- Instance for 3-tuples
-instance (All IsRNS (ChoiceTypes (x,y,z)), All IsRNS (FieldTypes (x,y,z)), MemRep x, MemRep y, MemRep z) => MemRep (x, y, z) where
+instance (MemRep x, MemRep y, MemRep z) => MemRep (x, y, z) where
   type ChoiceTypes (x,y,z) = Eval (ChoiceTypes x ++ Eval (ChoiceTypes y ++ ChoiceTypes z))
   choices (x,y,z) = rvconcat (choices x) $ rvconcat (choices y) (choices z)
 
@@ -409,7 +382,7 @@ instance (All IsRNS (ChoiceTypes (x,y,z)), All IsRNS (FieldTypes (x,y,z)), MemRe
 
 -----------------------------------------------------------------------
 -- GMemRep, the serf of this file
-class (All IsRNS (GChoiceTypes x), All IsRNS (GFieldTypes x)) => GMemRep x where
+class GMemRep x where
   type GChoiceTypes x :: [*]
   gchoices :: x -> Vector (GChoiceTypes x)
 
@@ -420,7 +393,10 @@ class (All IsRNS (GChoiceTypes x), All IsRNS (GFieldTypes x)) => GMemRep x where
   gemptyFields :: Vector (GFieldTypes x)
 
 -- Instance for Either-like types
-instance (All IsRNS (GChoiceTypes (SOP I '[ '[l], '[r]])), All IsRNS (GFieldTypes (SOP I '[ '[l], '[r]])), MemRep l, MemRep r) => GMemRep (SOP I '[ '[l], '[r]]) where
+instance
+    ( MemRep l
+    , MemRep r
+    ) => GMemRep (SOP I '[ '[l], '[r]]) where
   type GChoiceTypes (SOP I '[ '[l], '[r]]) =  Eval ('[RNS '[Finite 2]] ++ Eval (ZipWith' (<>) (ChoiceTypes l) (ChoiceTypes r)))
   gchoices (SOP (Z (I lv :* SOP.Nil)))     = Cons (RZ 0) (zipLeft (choices lv) (emptyChoices @ r))
   gchoices (SOP (S (Z (I rv :* SOP.Nil)))) = Cons (RZ 1) (zipRight (emptyChoices @ l) (choices rv))
@@ -433,7 +409,7 @@ instance (All IsRNS (GChoiceTypes (SOP I '[ '[l], '[r]])), All IsRNS (GFieldType
   gemptyFields = rnsConcat (emptyFields @ l) (emptyFields @ r)
 
 -- Instance for Tuple-like types
-instance (All IsRNS (GChoiceTypes (SOP I '[ '[a, b]])), All IsRNS (GFieldTypes (SOP I '[ '[a, b]])), MemRep a, MemRep b) => GMemRep (SOP I '[ '[a, b]]) where
+instance (MemRep a, MemRep b) =>  GMemRep (SOP I '[ '[a, b]]) where
   type GChoiceTypes (SOP I '[ '[a, b]]) = Eval (ChoiceTypes a ++ ChoiceTypes b)
   -- Non-exhaustive pattern match? Nope, there are no inhabitants of SOP (S x)
   -- This issue arises for any GMemRep (SOP I xs) instance (afaik)
@@ -447,11 +423,4 @@ instance (All IsRNS (GChoiceTypes (SOP I '[ '[a, b]])), All IsRNS (GFieldTypes (
 
 -- either equivalent type:
 data Try a b = Som a | Oth b
-             deriving (GHC.Generic, Generic)
-
-instance
-  ( MemRep a
-  , MemRep b
-  , All IsRNS (ChoiceTypes (Try a b))
-  , All IsRNS (FieldTypes (Try a b))
-  ) => MemRep (Try a b)
+             deriving (GHC.Generic, Generic, MemRep)

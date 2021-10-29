@@ -9,6 +9,5 @@ List of things that should or could be done:
 - Figure out how overlapping instances work and simplify our MemRep BaseType instances (and maybe IsRNS)
 - Rewrite widths to a function over a MemRep instead of a function in the class itself
 - Check Finite's on compile time (probably need some reification there)
-- Find out if we can do without IsRNS constraints and actually derive MemRep
 - Write more generic GMemRep instances
 - Write the proposal :)
