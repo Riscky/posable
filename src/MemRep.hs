@@ -124,7 +124,7 @@ instance {-# OVERLAPPING #-} (IsRNS (Sum xs)) => IsRNS (Sum (x:xs)) where
 -- We should probably merge them in a polymorphic thing (or even drop rnsConcat,
 -- since it is functionaly equivalent to applying zipLeft (or zipRight) on 2 empty values)
 zipLeft :: Product l -> Product r -> Product (Eval (ZipWith' (<>) l r))
-zipLeft (Cons (x :: a) xs) (Cons (y :: b) ys) = Cons (takeLeft x y) (rnsConcat xs ys)
+zipLeft (Cons (x :: a) xs) (Cons (y :: b) ys) = Cons (takeLeft x y) (zipLeft xs ys)
 zipLeft Nil ys = ys
 zipLeft xs Nil = xs
 
