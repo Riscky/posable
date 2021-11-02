@@ -14,6 +14,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE TypeFamilyDependencies #-}
 
 module MemRep where
 
@@ -83,6 +84,18 @@ type instance Eval (ZipWith' _f _as '[]) = _as
 type instance Eval (ZipWith' f (a ': as) (b ': bs)) =
   Eval (f a b) ': Eval (ZipWith' f as bs)
 
+
+-- we probably need injective type families here: https://gitlab.haskell.org/ghc/ghc/-/wikis/injective-type-families
+type family ZipSums (as :: [a]) (bs :: [b]) :: [c] where
+  ZipSums '[]        bs       = bs
+  ZipSums as        '[]       = as
+  ZipSums (a ': as) (b ': bs) = a </> b ': ZipSums as bs
+
+-- -- | Append for type-level lists.
+-- -- stolen to have an example for ZipSums
+-- type family (as :: [k]) +++ (bs :: [k]) :: [k] where
+--   '[] +++ bs = bs
+--   (a ': as) +++ bs = a ': (as +++ bs)
 
 data (<>) :: * -> * -> Exp *
 
