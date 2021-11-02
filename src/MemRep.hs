@@ -392,7 +392,20 @@ class GMemRep x where
   gemptyChoices :: Product (GChoiceTypes x)
   gemptyFields :: Product (GFieldTypes x)
 
--- Instance for Either-like types
+-- Instance for Units
+instance
+    ( MemRep x
+    ) => GMemRep (SOP I '[ '[]]) where
+  type GChoiceTypes (SOP I '[ '[]]) = '[]
+  gchoices _ = Nil
+
+  type GFieldTypes (SOP I '[ '[]]) = '[]
+  gfields _ = Nil
+
+  gemptyChoices = Nil
+  gemptyFields = Nil
+
+
 instance
     ( MemRep l
     , MemRep r
@@ -424,3 +437,6 @@ instance (MemRep a, MemRep b) =>  GMemRep (SOP I '[ '[a, b]]) where
 -- either equivalent type:
 data Try a b = Som a | Oth b
              deriving (GHC.Generic, Generic, MemRep)
+
+data Tuple a b = T a b
+               deriving (GHC.Generic, Generic, MemRep)
