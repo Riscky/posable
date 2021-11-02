@@ -125,12 +125,12 @@ class IsSum x where
 -- This brings the IsSum constraint in scope for all Sum x
 -- We don't need a definition of takeRight because the instances (IsSum '[]) and (IsSum (x:xs))
 -- together cover all possible values of Sum
-instance {-# OVERLAPPABLE #-} IsSum (Sum x) where
+-- instance {-# OVERLAPPABLE #-} IsSum (Sum x) where
 
-instance {-# OVERLAPPING #-} IsSum (Sum '[]) where
+instance IsSum (Sum '[]) where
   takeRight _ ys = ys
 
-instance {-# OVERLAPPING #-} (IsSum (Sum xs)) => IsSum (Sum (x:xs)) where
+instance (IsSum (Sum xs)) => IsSum (Sum (x:xs)) where
   takeRight (a :: Sum (x:xs)) (ys :: Sum r) = Next (takeRight (Empty :: Sum xs) ys :: (Sum (Eval (xs ++ r))))
 
 -- takeLeft and takeRight version of rnsConcat
@@ -146,7 +146,7 @@ takeLeft Empty  _ = Empty
 takeLeft (Pick x) _ = Pick x
 takeLeft (Next x) ys = Next (takeLeft x ys)
 
-zipRight :: Product l -> Product r -> Product (Eval (ZipWith' (<>) l r))
+zipRight :: (All IsSum l) => Product l -> Product r -> Product (Eval (ZipWith' (<>) l r))
 zipRight (Cons (x :: Sum a) xs) (Cons (y :: b) ys) = Cons (takeRight x y) (zipRight xs ys)
 zipRight Nil ys = ys
 zipRight xs Nil = xs
@@ -307,7 +307,7 @@ instance (MemRep a) => MemRep (Maybe a) where
   emptyFields  = emptyFields @ a
 
 -- Instance for Either, recursively defined
-instance (MemRep l, MemRep r) => MemRep (Either l r) where
+instance (All IsSum (Choices l), All IsSum (Fields l), MemRep l, MemRep r) => MemRep (Either l r) where
   type Choices (Either l r) = Eval ('[Sum '[Finite 2]] ++ Eval (ZipWith' (<>) (Choices l) (Choices r)))
   choices (Left lv)  = Cons (Pick 0) (zipLeft (choices lv) (emptyChoices @ r))
   choices (Right rv) = Cons (Pick 1) (zipRight (emptyChoices @ l) (choices rv))
@@ -323,7 +323,11 @@ instance (MemRep l, MemRep r) => MemRep (Either l r) where
 
 -- Instance for Direction type
 instance
-    ( MemRep l
+    ( All IsSum (Choices l)
+    , All IsSum (Fields l)
+    , All IsSum (Choices m)
+    , All IsSum (Fields m)
+    , MemRep l
     , MemRep m
     , MemRep r)
     => MemRep (Direction l m r) where
@@ -345,7 +349,9 @@ instance
 
 -- Instance for Mult type
 instance
-    ( MemRep a
+    ( All IsSum (Eval (Choices a ++ Choices b))
+    , All IsSum (Eval (Fields a ++ Fields b))
+    , MemRep a
     , MemRep b
     , MemRep c
     , MemRep d)
@@ -422,6 +428,8 @@ instance
 instance
     ( MemRep l
     , MemRep r
+    , All IsSum (Choices l)
+    , All IsSum (Fields l)
     ) => GMemRep (SOP I '[ '[l], '[r]]) where
   type GChoices (SOP I '[ '[l], '[r]]) =  Eval ('[Sum '[Finite 2]] ++ Eval (ZipWith' (<>) (Choices l) (Choices r)))
   gchoices (SOP (Z (I lv :* SOP.Nil)))     = Cons (Pick 0) (zipLeft (choices lv) (emptyChoices @ r))
@@ -448,8 +456,8 @@ instance (MemRep a, MemRep b) =>  GMemRep (SOP I '[ '[a, b]]) where
   gemptyFields = rvconcat (emptyFields @ a) (emptyFields @ b)
 
 -- either equivalent type:
-data Try a b = Som a | Oth b
-             deriving (GHC.Generic, Generic, MemRep)
+-- data Try a b = Som a | Oth b
+--              deriving (GHC.Generic, Generic, MemRep)
 
 data Tuple a b = T a b
                deriving (GHC.Generic, Generic, MemRep)
