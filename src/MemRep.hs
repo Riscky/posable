@@ -100,24 +100,24 @@ rnsConcat Nil ys = ys
 rnsConcat xs Nil = xs
 
 -- Proofs to convice the compiler that ChoiceTypes and FieldTypes contain Sum's
-class IsRNS x where
+class IsSum x where
   -- It has proven to be quite hard to write a working instance for takeRight
   -- This is due to Empty in left, which makes it hard to know how many Next's have to be applied
   -- We could have done some typeOf trickery:
   -- https://hackage.haskell.org/package/base-4.15.0.0/docs/Data-Typeable.html#v:typeOf
   -- but that requires runtime evaluation of types, which is not ideal
-  -- We now split Sum '[] and Sum (x':xs) into seperate instances of IsRNS
+  -- We now split Sum '[] and Sum (x':xs) into seperate instances of IsSum
   takeRight :: (x ~ Sum l) => Sum l -> Sum r -> Sum (Eval (l ++ r))
 
--- This brings the IsRNS constraint in scope for all Sum x
--- We don't need a definition of takeRight because the instances (IsRNS '[]) and (IsRNS (x:xs))
+-- This brings the IsSum constraint in scope for all Sum x
+-- We don't need a definition of takeRight because the instances (IsSum '[]) and (IsSum (x:xs))
 -- together cover all possible values of Sum
-instance {-# OVERLAPPABLE #-} IsRNS (Sum x) where
+instance {-# OVERLAPPABLE #-} IsSum (Sum x) where
 
-instance {-# OVERLAPPING #-} IsRNS (Sum '[]) where
+instance {-# OVERLAPPING #-} IsSum (Sum '[]) where
   takeRight _ ys = ys
 
-instance {-# OVERLAPPING #-} (IsRNS (Sum xs)) => IsRNS (Sum (x:xs)) where
+instance {-# OVERLAPPING #-} (IsSum (Sum xs)) => IsSum (Sum (x:xs)) where
   takeRight (a :: Sum (x:xs)) (ys :: Sum r) = Next (takeRight (Empty :: Sum xs) ys :: (Sum (Eval (xs ++ r))))
 
 -- takeLeft and takeRight version of rnsConcat
