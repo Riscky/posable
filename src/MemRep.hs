@@ -15,6 +15,8 @@
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE InstanceSigs #-}
 
 module MemRep where
 
@@ -40,6 +42,10 @@ import Fcf ( Eval, Exp)
 import qualified GHC.Generics as GHC
 import qualified Generics.SOP as SOP
 
+import Data.Kind
+import Data.Singletons
+    ( withSomeSing, Sing, SingKind(..), SomeSing(..) )
+
 -----------------------------------------------------------------------
 -- Heterogeneous lists with explicit types
 data Product xs where
@@ -62,6 +68,56 @@ data Sum :: [*] -> * where
   Pick :: x -> Sum (x ': xs)
   Next :: Sum xs -> Sum (x ': xs)
   Empty :: Sum xs
+
+data Length l where
+  IsNil :: Length '[]
+  IsCons :: Length xs -> Length (x ': xs)
+
+type family GetLength (x :: *) :: Length y | x -> y where
+  GetLength (Sum '[])       = IsNil
+  GetLength (Sum (x ': xs)) = IsCons (GetLength (Sum xs))
+
+data Nat where
+  Zero :: Nat
+  Succ :: Nat -> Nat
+  deriving (Show)
+
+type family LengthToNat (a :: Length l) :: n | l -> n where
+  LengthToNat IsNil       = Zero
+  LengthToNat (IsCons xs) = Succ (LengthToNat xs)
+
+data SNat :: Nat -> Type where
+  SZero :: SNat 'Zero
+  SSucc :: SNat n -> SNat ('Succ n)
+
+type instance Sing = SNat
+
+instance SingKind Nat where
+  type Demote Nat = Nat
+
+  fromSing :: SNat n -> Demote Nat
+  fromSing = \case
+    SZero   -> Zero
+    SSucc n -> Succ (fromSing n)
+
+  toSing :: Demote Nat -> SomeSing Nat
+  toSing = \case
+    Zero   -> SomeSing SZero
+    Succ n -> withSomeSing n (SomeSing . SSucc)
+
+sNatToInt :: SNat n -> Int
+sNatToInt SZero = 0
+sNatToInt (SSucc n) = 1 + sNatToInt n
+
+sumToLength :: Sum l -> Length l
+sumToLength s = undefined
+
+takeRight'' :: Sum l -> Sum r -> Sum (l ++ r)
+takeRight'' l = takeRight' (sumToLength l) l
+
+takeRight' :: Length l -> Sum l -> Sum r -> Sum (l ++ r)
+takeRight' IsNil        l r = r
+takeRight' (IsCons len) l r = Next (takeRight' len Empty r)
 
 instance (All Show x) => Show (Sum x) where
   show (Pick x) = show x

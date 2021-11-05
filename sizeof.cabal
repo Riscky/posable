@@ -51,8 +51,7 @@ executable sizeof
   main-is:             Main.hs
 
   -- Modules included in this executable, other than Main.
-  other-modules:       Interactive
-                     , MemRep
+  other-modules:       MemRep
 
   -- LANGUAGE extensions used by modules in this package.
   -- other-extensions:
@@ -67,6 +66,7 @@ executable sizeof
                      , ghc-typelits-extra == 0.4.3
                      , first-class-families == 0.8.0.1
                      , finite-typelits == 0.1.4.2
+                     , singletons >= 3.0
 
   -- Directories containing source files.
   hs-source-dirs:      src
