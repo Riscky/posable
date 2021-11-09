@@ -14,8 +14,6 @@
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE InstanceSigs #-}
 
 module MemRep where
 
@@ -36,7 +34,7 @@ import Generics.SOP
 import Data.Int (Int8, Int16, Int32, Int64)
 import Data.Finite.Internal (Finite)
 
-import Fcf ( Eval, Exp)
+import Fcf ( Eval, Exp, type (++), Map)
 
 import qualified GHC.Generics as GHC
 import qualified Generics.SOP as SOP
@@ -55,7 +53,7 @@ instance (All Show xs) =>  Show (Product xs) where
 
 -- concat for Products
 -- could (should) be a Semigroup instance (<>)
-rvconcat :: Product x -> Product y -> Product (x ++ y)
+rvconcat :: Product x -> Product y -> Product (Eval (x ++ y))
 rvconcat Nil         ys = ys
 rvconcat (Cons x xs) ys = Cons x (rvconcat xs ys)
 
@@ -96,12 +94,6 @@ type family ZipSums (as :: [a]) (bs :: [b]) :: [c] where
   ZipSums as        '[]       = as
   ZipSums (a ': as) (b ': bs) = a </> b ': ZipSums as bs
 
--- -- | Append for type-level lists.
--- -- stolen to have an example for ZipSums
-type family (as :: [k]) ++ (bs :: [k]) :: [k] where
-  '[] ++ bs = bs
-  (a ': as) ++ bs = a ': (as ++ bs)
-
 data (<>) :: * -> * -> Exp *
 
 type instance Eval ((<>) x y) = x </> y
@@ -109,7 +101,7 @@ type instance Eval ((<>) x y) = x </> y
 -- Type level append of Sum's
 -- We might want to use the correct operator here, but for now this works well enough
 type family (a :: *) </> (b :: *) :: * where
-  Sum a </> Sum b = Sum (a ++ b)
+  Sum a </> Sum b = Sum (Eval (a ++ b))
 
 -- value level implementation of ZipWith' (<>)
 -- one version takes the values in right, the other in left
@@ -118,12 +110,12 @@ zipLeft (Cons (x :: a) xs) (Cons (y :: b) ys) = Cons (takeLeft x y) (zipLeft xs 
 zipLeft Nil ys = ys
 zipLeft xs Nil = xs
 
-takeLeft :: Sum l -> Sum r -> Sum (l ++ r)
+takeLeft :: Sum l -> Sum r -> Sum (Eval (l ++ r))
 takeLeft (Pick l ls) r = Pick l (takeLeft ls r)
 takeLeft (Skip ls)   r = Skip (takeLeft ls r)
 takeLeft Empty       r = r
 
-takeRight :: Sum l -> Sum r -> Sum (l ++ r)
+takeRight :: Sum l -> Sum r -> Sum (Eval (l ++ r))
 takeRight (Pick l ls) r = Skip (takeRight ls r)
 takeRight (Skip ls)   r = Skip (takeRight ls r)
 takeRight Empty       r = r
@@ -332,11 +324,11 @@ instance
     , MemRep c
     , MemRep d)
     => MemRep (Mult a b c d) where
-  type Choices (Mult a b c d) = Sum '[Finite 2] ': Eval (ZipWith' (<>) (Choices a ++ Choices b) (Choices c ++ Choices d))
+  type Choices (Mult a b c d) = Sum '[Finite 2] ': Eval (ZipWith' (<>) (Eval (Choices a ++ Choices b)) (Eval (Choices c ++ Choices d)))
   choices (Fst av bv) = Cons (Pick 0 Empty) (zipLeft (rvconcat (choices av) (choices bv)) (rvconcat (emptyChoices @ c) (emptyChoices @ d)))
   choices (Snd cv dv) = Cons (Pick 1 Empty) (zipRight (rvconcat (emptyChoices @ a) (emptyChoices @ b)) (rvconcat (choices cv) (choices dv)))
 
-  type Fields (Mult a b c d) = Eval (ZipWith' (<>) (Fields a ++ Fields b) (Fields c ++ Fields d))
+  type Fields (Mult a b c d) = Eval (ZipWith' (<>) (Eval (Fields a ++ Fields b)) (Eval (Fields c ++ Fields d)))
   fields (Fst av bv) = zipLeft (rvconcat (fields av) (fields bv)) (rvconcat (emptyFields @ c) (emptyFields @ d))
   fields (Snd cv dv) = zipRight (rvconcat (emptyFields @ a) (emptyFields @ b)) (rvconcat (fields cv) (fields dv))
 
@@ -348,10 +340,10 @@ instance
 -- Instance for product types (tuples)
 -- Recursively defined, because concatenation is a whole lot easier then zipWith (++)
 instance (MemRep x, MemRep y) => MemRep (x, y) where
-  type Choices (x,y) = Choices x ++ Choices y
+  type Choices (x,y) = Eval (Choices x ++ Choices y)
   choices (x,y) = rvconcat (choices x) (choices y)
 
-  type Fields (x, y) = Fields x ++ Fields y
+  type Fields (x, y) = Eval (Fields x ++ Fields y)
   fields (x,y) = rvconcat (fields x) (fields y)
 
   widths = widths @ x ++ widths @ y
@@ -361,10 +353,10 @@ instance (MemRep x, MemRep y) => MemRep (x, y) where
 
 -- Instance for 3-tuples
 instance (MemRep x, MemRep y, MemRep z) => MemRep (x, y, z) where
-  type Choices (x,y,z) = Choices x ++ (Choices y ++ Choices z)
+  type Choices (x,y,z) = Eval (Choices x ++ Eval (Choices y ++ Choices z))
   choices (x,y,z) = rvconcat (choices x) $ rvconcat (choices y) (choices z)
 
-  type Fields (x,y,z) = Fields x ++ (Fields y ++ Fields z)
+  type Fields (x,y,z) = Eval (Fields x ++ Eval (Fields y ++ Fields z))
   fields (x,y,z) = rvconcat (fields x) $ rvconcat (fields y) (fields z)
 
   widths = widths @ x ++ widths @ y ++ widths @ z
@@ -387,20 +379,6 @@ class GMemRep x where
   gemptyChoices :: Product (GChoices x)
   gemptyFields :: Product (GFields x)
 
--- Instance for Units
-instance
-    ( MemRep x
-    ) => GMemRep (SOP I '[ '[]]) where
-  type GChoices (SOP I '[ '[]]) = '[]
-  gchoices _ = Nil
-
-  type GFields (SOP I '[ '[]]) = '[]
-  gfields _ = Nil
-
-  gemptyChoices = Nil
-  gemptyFields = Nil
-
-
 instance
     ( MemRep l
     , MemRep r
@@ -416,18 +394,44 @@ instance
   gemptyChoices = Cons (Skip Empty) (zipLeft (emptyChoices @ l) (emptyChoices @ r))
   gemptyFields = zipLeft (emptyFields @ l) (emptyFields @ r)
 
--- Instance for Tuple-like types
-instance (MemRep a, MemRep b) =>  GMemRep (SOP I '[ '[a, b]]) where
-  type GChoices (SOP I '[ '[a, b]]) = Choices a ++ Choices b
-  -- Non-exhaustive pattern match? Nope, there are no inhabitants of SOP (S x)
-  -- This issue arises for any GMemRep (SOP I xs) instance (afaik)
-  gchoices (SOP (Z (I av :* I bv :* SOP.Nil))) = rvconcat (choices av) (choices bv)
+data AppChoices :: x -> Exp y
 
-  type GFields (SOP I '[ '[a, b]]) = Fields a ++ Fields b
-  gfields (SOP (Z (I av :* I bv :* SOP.Nil))) = rvconcat (fields av) (fields bv)
+type instance Eval (AppChoices x) = Choices x
 
-  gemptyChoices = rvconcat (emptyChoices @ a) (emptyChoices @ b)
-  gemptyFields = rvconcat (emptyFields @ a) (emptyFields @ b)
+data AppFields :: x -> Exp y
+
+type instance Eval (AppFields x) = Fields x
+
+-- from https://hackage.haskell.org/package/first-class-families-0.8.0.1/docs/src/Fcf.Class.Foldable.html#Foldr
+-- why use this instead of FoldR?
+-- because this matches the way Fcf.<> works, so I don't have to prove that it is associative
+data Foldl :: (a -> b -> Exp b) -> b -> t a -> Exp b
+
+type instance Eval (Foldl f y '[]) = y
+type instance Eval (Foldl f y (x ': xs)) = Eval (Foldl f (Eval (f y x)) xs)
+
+
+instance (All MemRep as) => GMemRep (SOP I '[as]) where
+  type GChoices (SOP I '[as]) = Eval (Foldl (++) '[] (Eval (Map AppChoices as)))
+  gchoices (SOP (Z SOP.Nil)) = Nil
+  gchoices (SOP (Z (I a :* SOP.Nil))) = choices a
+  gchoices (SOP (Z (I a :* I b :* SOP.Nil))) = rvconcat (choices a) (choices b)
+  gchoices (SOP (Z (I a :* I b :* I c :* SOP.Nil))) = rvconcat (rvconcat (choices a) (choices b)) (choices c)
+  gchoices (SOP (Z xs)) = undefined
+
+  gchoices (SOP (S _)) = error "this is not even possible"
+
+  type GFields (SOP I '[as]) = Eval (Foldl (++) '[] (Eval (Map AppFields as)))
+  gfields (SOP (Z SOP.Nil)) = Nil
+  gfields (SOP (Z (I a :* SOP.Nil))) = fields a
+  gfields (SOP (Z (I a :* I b :* SOP.Nil))) = rvconcat (fields a) (fields b)
+  gfields (SOP (Z (I a :* I b :* I c :* SOP.Nil))) = rvconcat (rvconcat (fields a) (fields b)) (fields c)
+  gfields (SOP (Z xs)) = undefined
+
+  gfields (SOP (S _)) = error "this is not even possible"
+
+  gemptyChoices = undefined
+  gemptyFields = undefined
 
 -- either equivalent type:
 data Try a b = Som a | Oth b
