@@ -2,7 +2,6 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
@@ -43,8 +42,6 @@ import qualified GHC.Generics as GHC
 import qualified Generics.SOP as SOP
 
 import Data.Kind
-import Data.Singletons
-    ( withSomeSing, Sing, SingKind(..), SomeSing(..) )
 
 -----------------------------------------------------------------------
 -- Heterogeneous lists with explicit types
@@ -64,65 +61,17 @@ rvconcat (Cons x xs) ys = Cons x (rvconcat xs ys)
 
 -----------------------------------------------------------------------
 -- Typelevel sums with a empty value
+-- TODO: naming
+-- The semantics of this thing is: first Pick is relevant value, if there
+-- are more Pick they can be replaced by Skips
 data Sum :: [*] -> * where
-  Pick :: x -> Sum (x ': xs)
-  Next :: Sum xs -> Sum (x ': xs)
-  Empty :: Sum xs
-
-data Length l where
-  IsNil :: Length '[]
-  IsCons :: Length xs -> Length (x ': xs)
-
-type family GetLength (x :: *) :: Length y | x -> y where
-  GetLength (Sum '[])       = IsNil
-  GetLength (Sum (x ': xs)) = IsCons (GetLength (Sum xs))
-
-data Nat where
-  Zero :: Nat
-  Succ :: Nat -> Nat
-  deriving (Show)
-
-type family LengthToNat (a :: Length l) :: n | l -> n where
-  LengthToNat IsNil       = Zero
-  LengthToNat (IsCons xs) = Succ (LengthToNat xs)
-
-data SNat :: Nat -> Type where
-  SZero :: SNat 'Zero
-  SSucc :: SNat n -> SNat ('Succ n)
-
-type instance Sing = SNat
-
-instance SingKind Nat where
-  type Demote Nat = Nat
-
-  fromSing :: SNat n -> Demote Nat
-  fromSing = \case
-    SZero   -> Zero
-    SSucc n -> Succ (fromSing n)
-
-  toSing :: Demote Nat -> SomeSing Nat
-  toSing = \case
-    Zero   -> SomeSing SZero
-    Succ n -> withSomeSing n (SomeSing . SSucc)
-
-sNatToInt :: SNat n -> Int
-sNatToInt SZero = 0
-sNatToInt (SSucc n) = 1 + sNatToInt n
-
-sumToLength :: Sum l -> Length l
-sumToLength s = undefined
-
-takeRight'' :: Sum l -> Sum r -> Sum (l ++ r)
-takeRight'' l = takeRight' (sumToLength l) l
-
-takeRight' :: Length l -> Sum l -> Sum r -> Sum (l ++ r)
-takeRight' IsNil        l r = r
-takeRight' (IsCons len) l r = Next (takeRight' len Empty r)
-
+  Pick :: x -> Sum xs -> Sum (x ': xs)
+  Skip :: Sum xs -> Sum (x ': xs)
+  Empty :: Sum '[]
 instance (All Show x) => Show (Sum x) where
-  show (Pick x) = show x
-  show (Next x) = show x
-  show Empty = "Ø"
+  show (Pick x xs) = show x
+  show (Skip x)    = show x
+  show Empty       = "Ø"
 
 -- stolen from https://hackage.haskell.org/package/first-class-families-0.8.0.1
 -- and adapted to keep the length of the longest list
@@ -162,56 +111,24 @@ type instance Eval ((<>) x y) = x </> y
 type family (a :: *) </> (b :: *) :: * where
   Sum a </> Sum b = Sum (a ++ b)
 
--- Value level implementation of ZipWith' (<>)
-rnsConcat :: Product l -> Product r -> Product (Eval (ZipWith' (<>) l r))
-rnsConcat (Cons (x :: Sum a) xs) (Cons (y :: Sum b) ys) = Cons Empty (rnsConcat xs ys)
-rnsConcat Nil ys = ys
-rnsConcat xs Nil = xs
-
--- Value level implementation of ZipWith' (<>)
--- zipWith' :: (Sum l -> Sum r -> Sum (l +++ r)) -> Product l -> Product r -> Product (Eval (ZipWith' (<>) l r))
--- zipWith' f (Cons x xs) (Cons y ys) = Cons (f x y) (zipWith' f xs ys)
--- zipWith' f Nil ys = ys
--- zipWith' f xs Nil = xs
-
--- Proofs to convice the compiler that Choices and Fields contain Sum's
-class IsSum x where
-  -- It has proven to be quite hard to write a working instance for takeRight
-  -- This is due to Empty in left, which makes it hard to know how many Next's have to be applied
-  -- We could have done some typeOf trickery:
-  -- https://hackage.haskell.org/package/base-4.15.0.0/docs/Data-Typeable.html#v:typeOf
-  -- but that requires runtime evaluation of types, which is not ideal
-  -- We now split Sum '[] and Sum (x':xs) into seperate instances of IsSum
-  takeRight :: (x ~ Sum l) => Sum l -> Sum r -> Sum (l ++ r)
-
-  default takeRight :: (x ~ Sum '[], x ~ Sum l) => Sum l -> Sum r -> Sum (l ++ r)
-  takeRight _ ys = ys
-
--- This brings the IsSum constraint in scope for all Sum x
--- We don't need a definition of takeRight because the instances (IsSum '[]) and (IsSum (x:xs))
--- together cover all possible values of Sum
--- instance {-# OVERLAPPABLE #-} IsSum (Sum x) where
-
-instance IsSum (Sum '[]) where
-  takeRight _ ys = ys
-
-instance (IsSum (Sum xs)) => IsSum (Sum (x:xs)) where
-  takeRight (a :: Sum (x:xs)) (ys :: Sum r) = Next (takeRight (Empty :: Sum xs) ys :: (Sum (xs ++ r)))
-
--- takeLeft and takeRight version of rnsConcat
--- We should probably merge them in a polymorphic thing (or even drop rnsConcat,
--- since it is functionaly equivalent to applying zipLeft (or zipRight) on 2 empty values)
+-- value level implementation of ZipWith' (<>)
+-- one version takes the values in right, the other in left
 zipLeft :: Product l -> Product r -> Product (Eval (ZipWith' (<>) l r))
 zipLeft (Cons (x :: a) xs) (Cons (y :: b) ys) = Cons (takeLeft x y) (zipLeft xs ys)
 zipLeft Nil ys = ys
 zipLeft xs Nil = xs
 
 takeLeft :: Sum l -> Sum r -> Sum (l ++ r)
-takeLeft Empty  _ = Empty
-takeLeft (Pick x) _ = Pick x
-takeLeft (Next x) ys = Next (takeLeft x ys)
+takeLeft (Pick l ls) r = Pick l (takeLeft ls r)
+takeLeft (Skip ls)   r = Skip (takeLeft ls r)
+takeLeft Empty       r = r
 
-zipRight :: (All IsSum l) => Product l -> Product r -> Product (Eval (ZipWith' (<>) l r))
+takeRight :: Sum l -> Sum r -> Sum (l ++ r)
+takeRight (Pick l ls) r = Skip (takeRight ls r)
+takeRight (Skip ls)   r = Skip (takeRight ls r)
+takeRight Empty       r = r
+
+zipRight :: Product l -> Product r -> Product (Eval (ZipWith' (<>) l r))
 zipRight (Cons (x :: Sum a) xs) (Cons (y :: b) ys) = Cons (takeRight x y) (zipRight xs ys)
 zipRight Nil ys = ys
 zipRight xs Nil = xs
@@ -296,48 +213,48 @@ instance MemRep Int where
   choices _ = Nil
 
   type Fields Int = '[Sum '[Int]]
-  fields x = Cons (Pick x) Nil
+  fields x = Cons (Pick x Empty) Nil
 
   widths = [32]
 
   emptyChoices = Nil
-  emptyFields = Cons Empty Nil
+  emptyFields = Cons (Skip Empty) Nil
 
 instance MemRep Float where
   type Choices Float = '[]
   choices _ = Nil
 
   type Fields Float = '[Sum '[Float]]
-  fields x = Cons (Pick x) Nil
+  fields x = Cons (Pick x Empty) Nil
 
   widths = [32]
 
   emptyChoices = Nil
-  emptyFields = Cons Empty Nil
+  emptyFields = Cons (Skip Empty) Nil
 
 instance MemRep Int8 where
   type Choices Int8 = '[]
   choices _ = Nil
 
   type Fields Int8 = '[Sum '[Int8]]
-  fields x = Cons (Pick x) Nil
+  fields x = Cons (Pick x Empty) Nil
 
   widths = [8]
 
   emptyChoices = Nil
-  emptyFields = Cons Empty Nil
+  emptyFields = Cons (Skip Empty) Nil
 
 instance MemRep Int16 where
   type Choices Int16 = '[]
   choices _ = Nil
 
   type Fields Int16 = '[Sum '[Int16]]
-  fields x = Cons (Pick x) Nil
+  fields x = Cons (Pick x Empty) Nil
 
   widths = [16]
 
   emptyChoices = Nil
-  emptyFields = Cons Empty Nil
+  emptyFields = Cons (Skip Empty) Nil
 
 -----------------------------------------------------------------------
 -- Instances of MemRep that should be generically derived in the future
@@ -345,22 +262,22 @@ instance MemRep Int16 where
 -- Instance for Boolean
 instance MemRep Bool where
   type Choices Bool = '[Sum '[Finite 2]]
-  choices False = Cons (Pick 0) Nil
-  choices True  = Cons (Pick 1) Nil
+  choices False = Cons (Pick 0 Empty) Nil
+  choices True  = Cons (Pick 1 Empty) Nil
 
   type Fields Bool = '[]
   fields _ = Nil
 
   widths = []
 
-  emptyChoices = Cons Empty Nil
+  emptyChoices = Cons (Skip Empty) Nil
   emptyFields  = Nil
 
 -- Instance for Maybe
 instance (MemRep a) => MemRep (Maybe a) where
   type Choices (Maybe a) = Sum '[Finite 2] ': Choices a
-  choices Nothing  = Cons (Pick 0) (emptyChoices @ a)
-  choices (Just x) = Cons (Pick 1) (choices x)
+  choices Nothing  = Cons (Pick 0 Empty) (emptyChoices @ a)
+  choices (Just x) = Cons (Pick 1 Empty) (choices x)
 
   type Fields (Maybe a) = Fields a
   fields Nothing  = emptyFields @ a
@@ -368,14 +285,14 @@ instance (MemRep a) => MemRep (Maybe a) where
 
   widths = widths @ a
 
-  emptyChoices = Cons Empty (emptyChoices @ a)
+  emptyChoices = Cons (Skip Empty) (emptyChoices @ a)
   emptyFields  = emptyFields @ a
 
 -- Instance for Either, recursively defined
-instance (All IsSum (Choices l), All IsSum (Fields l), MemRep l, MemRep r) => MemRep (Either l r) where
+instance (MemRep l, MemRep r) => MemRep (Either l r) where
   type Choices (Either l r) = Sum '[Finite 2] ': Eval (ZipWith' (<>) (Choices l) (Choices r))
-  choices (Left lv)  = Cons (Pick 0) (zipLeft (choices lv) (emptyChoices @ r))
-  choices (Right rv) = Cons (Pick 1) (zipRight (emptyChoices @ l) (choices rv))
+  choices (Left lv)  = Cons (Pick 0 Empty) (zipLeft (choices lv) (emptyChoices @ r))
+  choices (Right rv) = Cons (Pick 1 Empty) (zipRight (emptyChoices @ l) (choices rv))
 
   type Fields (Either l r) = Eval (ZipWith' (<>) (Fields l) (Fields r))
   fields (Left lv)  = zipLeft (fields lv) (emptyFields @ r)
@@ -383,23 +300,19 @@ instance (All IsSum (Choices l), All IsSum (Fields l), MemRep l, MemRep r) => Me
 
   widths = zipWith max (widths @ l) (widths @ r)
 
-  emptyChoices = Cons Empty (rnsConcat (emptyChoices @ l) (emptyChoices @ r))
-  emptyFields = rnsConcat (emptyFields @ l) (emptyFields @ r)
+  emptyChoices = Cons (Skip Empty) (zipLeft (emptyChoices @ l) (emptyChoices @ r))
+  emptyFields = zipLeft (emptyFields @ l) (emptyFields @ r)
 
 -- Instance for Direction type
 instance
-    ( All IsSum (Choices l)
-    , All IsSum (Fields l)
-    , All IsSum (Choices m)
-    , All IsSum (Fields m)
-    , MemRep l
+    ( MemRep l
     , MemRep m
     , MemRep r)
     => MemRep (Direction l m r) where
   type Choices (Direction l m r) = Sum '[Finite 3] ': Eval (ZipWith' (<>) (Choices l) (Eval (ZipWith' (<>) (Choices m) (Choices r))))
-  choices (Lef lv) = Cons (Pick 0) (zipLeft  (choices lv)       (zipLeft  (emptyChoices @ m) (emptyChoices @ r)))
-  choices (Mid mv) = Cons (Pick 1) (zipRight (emptyChoices @ l) (zipLeft  (choices mv)       (emptyChoices @ r)))
-  choices (Rig rv) = Cons (Pick 2) (zipRight (emptyChoices @ l) (zipRight (emptyChoices @ m) (choices rv)))
+  choices (Lef lv) = Cons (Pick 0 Empty) (zipLeft  (choices lv)       (zipLeft  (emptyChoices @ m) (emptyChoices @ r)))
+  choices (Mid mv) = Cons (Pick 1 Empty) (zipRight (emptyChoices @ l) (zipLeft  (choices mv)       (emptyChoices @ r)))
+  choices (Rig rv) = Cons (Pick 2 Empty) (zipRight (emptyChoices @ l) (zipRight (emptyChoices @ m) (choices rv)))
 
   type Fields (Direction l m r) = Eval (ZipWith' (<>) (Fields l) (Eval (ZipWith' (<>) (Fields m) (Fields r))))
   fields (Lef lv) = zipLeft  (fields lv)       (zipLeft  (emptyFields @ m) (emptyFields @ r))
@@ -408,22 +321,20 @@ instance
 
   widths = zipWith max (widths @ l) (zipWith max (widths @ m) (widths @ r))
 
-  emptyChoices = Cons Empty (rnsConcat (emptyChoices @ l) (rnsConcat (emptyChoices @ m) (emptyChoices @ r)))
-  emptyFields = rnsConcat (emptyFields @ l) (rnsConcat (emptyFields @ m) (emptyFields @ r))
+  emptyChoices = Cons (Skip Empty) (zipLeft (emptyChoices @ l) (zipLeft (emptyChoices @ m) (emptyChoices @ r)))
+  emptyFields = zipLeft (emptyFields @ l) (zipLeft (emptyFields @ m) (emptyFields @ r))
 
 
 -- Instance for Mult type
 instance
-    ( All IsSum (Choices a ++ Choices b)
-    , All IsSum (Fields a ++ Fields b)
-    , MemRep a
+    ( MemRep a
     , MemRep b
     , MemRep c
     , MemRep d)
     => MemRep (Mult a b c d) where
   type Choices (Mult a b c d) = Sum '[Finite 2] ': Eval (ZipWith' (<>) (Choices a ++ Choices b) (Choices c ++ Choices d))
-  choices (Fst av bv) = Cons (Pick 0) (zipLeft (rvconcat (choices av) (choices bv)) (rvconcat (emptyChoices @ c) (emptyChoices @ d)))
-  choices (Snd cv dv) = Cons (Pick 1) (zipRight (rvconcat (emptyChoices @ a) (emptyChoices @ b)) (rvconcat (choices cv) (choices dv)))
+  choices (Fst av bv) = Cons (Pick 0 Empty) (zipLeft (rvconcat (choices av) (choices bv)) (rvconcat (emptyChoices @ c) (emptyChoices @ d)))
+  choices (Snd cv dv) = Cons (Pick 1 Empty) (zipRight (rvconcat (emptyChoices @ a) (emptyChoices @ b)) (rvconcat (choices cv) (choices dv)))
 
   type Fields (Mult a b c d) = Eval (ZipWith' (<>) (Fields a ++ Fields b) (Fields c ++ Fields d))
   fields (Fst av bv) = zipLeft (rvconcat (fields av) (fields bv)) (rvconcat (emptyFields @ c) (emptyFields @ d))
@@ -431,8 +342,8 @@ instance
 
   widths = zipWith max (widths @ a ++ widths @ b) (widths @ c ++ widths @ d)
 
-  emptyChoices = Cons Empty (rnsConcat (rvconcat (emptyChoices @ a) (emptyChoices @ b)) (rvconcat (emptyChoices @ c) (emptyChoices @ d)))
-  emptyFields = rnsConcat (rvconcat (emptyFields @ a) (emptyFields @ b)) (rvconcat (emptyFields @ c) (emptyFields @ d))
+  emptyChoices = Cons (Skip Empty) (zipLeft (rvconcat (emptyChoices @ a) (emptyChoices @ b)) (rvconcat (emptyChoices @ c) (emptyChoices @ d)))
+  emptyFields = zipLeft (rvconcat (emptyFields @ a) (emptyFields @ b)) (rvconcat (emptyFields @ c) (emptyFields @ d))
 
 -- Instance for product types (tuples)
 -- Recursively defined, because concatenation is a whole lot easier then zipWith (++)
@@ -493,19 +404,17 @@ instance
 instance
     ( MemRep l
     , MemRep r
-    , All IsSum (Choices l)
-    , All IsSum (Fields l)
     ) => GMemRep (SOP I '[ '[l], '[r]]) where
   type GChoices (SOP I '[ '[l], '[r]]) =  Sum '[Finite 2] ': Eval (ZipWith' (<>) (Choices l) (Choices r))
-  gchoices (SOP (Z (I lv :* SOP.Nil)))     = Cons (Pick 0) (zipLeft (choices lv) (emptyChoices @ r))
-  gchoices (SOP (S (Z (I rv :* SOP.Nil)))) = Cons (Pick 1) (zipRight (emptyChoices @ l) (choices rv))
+  gchoices (SOP (Z (I lv :* SOP.Nil)))     = Cons (Pick 0 Empty) (zipLeft (choices lv) (emptyChoices @ r))
+  gchoices (SOP (S (Z (I rv :* SOP.Nil)))) = Cons (Pick 1 Empty) (zipRight (emptyChoices @ l) (choices rv))
 
   type GFields (SOP I '[ '[l], '[r]]) = Eval (ZipWith' (<>) (Fields l) (Fields r))
   gfields (SOP (Z (I lv :* SOP.Nil)))     = zipLeft  (fields lv)       (emptyFields @ r)
   gfields (SOP (S (Z (I rv :* SOP.Nil)))) = zipRight (emptyFields @ l) (fields rv)
 
-  gemptyChoices = Cons Empty (rnsConcat (emptyChoices @ l) (emptyChoices @ r))
-  gemptyFields = rnsConcat (emptyFields @ l) (emptyFields @ r)
+  gemptyChoices = Cons (Skip Empty) (zipLeft (emptyChoices @ l) (emptyChoices @ r))
+  gemptyFields = zipLeft (emptyFields @ l) (emptyFields @ r)
 
 -- Instance for Tuple-like types
 instance (MemRep a, MemRep b) =>  GMemRep (SOP I '[ '[a, b]]) where
@@ -521,8 +430,8 @@ instance (MemRep a, MemRep b) =>  GMemRep (SOP I '[ '[a, b]]) where
   gemptyFields = rvconcat (emptyFields @ a) (emptyFields @ b)
 
 -- either equivalent type:
--- data Try a b = Som a | Oth b
---              deriving (GHC.Generic, Generic, MemRep)
+data Try a b = Som a | Oth b
+             deriving (GHC.Generic, Generic, MemRep)
 
 data Tuple a b = T a b
                deriving (GHC.Generic, Generic, MemRep)
