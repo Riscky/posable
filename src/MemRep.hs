@@ -63,9 +63,14 @@ rvconcat (Cons x xs) ys = Cons x (rvconcat xs ys)
 -- The semantics of this thing is: first Pick is relevant value, if there
 -- are more Pick they can be replaced by Skips
 data Sum :: [*] -> * where
-  Pick :: x -> Sum xs -> Sum (x ': xs)
+  Pick :: x -> Remainder xs -> Sum (x ': xs)
   Skip :: Sum xs -> Sum (x ': xs)
   Empty :: Sum '[]
+
+data Remainder :: [*] -> * where
+  RCons :: Remainder xs -> Remainder (x ': xs)
+  RNil  :: Remainder '[]
+
 instance (All Show x) => Show (Sum x) where
   show (Pick x xs) = show x
   show (Skip x)    = show x
@@ -111,14 +116,28 @@ zipLeft Nil ys = ys
 zipLeft xs Nil = xs
 
 takeLeft :: Sum l -> Sum r -> Sum (Eval (l ++ r))
-takeLeft (Pick l ls) r = Pick l (takeLeft ls r)
+takeLeft (Pick l ls) r = Pick l (takeLeft' ls r)
 takeLeft (Skip ls)   r = Skip (takeLeft ls r)
 takeLeft Empty       r = r
 
+takeLeft' :: Remainder l -> Sum r -> Remainder (Eval (l ++ r))
+takeLeft' (RCons ls) r           = RCons (takeLeft' ls r)
+takeLeft' RNil       Empty       = RNil
+takeLeft' RNil       (Skip rs)   = RCons (takeLeft' RNil rs)
+takeLeft' RNil       (Pick r rs) = RCons (takeLeft'' RNil rs)
+
+takeLeft'' :: Remainder l -> Remainder r -> Remainder (Eval (l ++ r))
+takeLeft'' (RCons ls) r = RCons (takeLeft'' ls r)
+takeLeft'' RNil       r = r
+
 takeRight :: Sum l -> Sum r -> Sum (Eval (l ++ r))
-takeRight (Pick l ls) r = Skip (takeRight ls r)
+takeRight (Pick l ls) r = Skip (takeRight' ls r)
 takeRight (Skip ls)   r = Skip (takeRight ls r)
 takeRight Empty       r = r
+
+takeRight' :: Remainder l -> Sum r -> Sum (Eval (l ++ r))
+takeRight' (RCons ls) r = Skip (takeRight' ls r)
+takeRight' RNil       r = r
 
 zipRight :: Product l -> Product r -> Product (Eval (ZipWith' (<>) l r))
 zipRight (Cons (x :: Sum a) xs) (Cons (y :: b) ys) = Cons (takeRight x y) (zipRight xs ys)
@@ -205,7 +224,7 @@ instance MemRep Int where
   choices _ = Nil
 
   type Fields Int = '[Sum '[Int]]
-  fields x = Cons (Pick x Empty) Nil
+  fields x = Cons (Pick x RNil) Nil
 
   widths = [32]
 
@@ -217,7 +236,7 @@ instance MemRep Float where
   choices _ = Nil
 
   type Fields Float = '[Sum '[Float]]
-  fields x = Cons (Pick x Empty) Nil
+  fields x = Cons (Pick x RNil) Nil
 
   widths = [32]
 
@@ -229,7 +248,7 @@ instance MemRep Int8 where
   choices _ = Nil
 
   type Fields Int8 = '[Sum '[Int8]]
-  fields x = Cons (Pick x Empty) Nil
+  fields x = Cons (Pick x RNil) Nil
 
   widths = [8]
 
@@ -241,7 +260,7 @@ instance MemRep Int16 where
   choices _ = Nil
 
   type Fields Int16 = '[Sum '[Int16]]
-  fields x = Cons (Pick x Empty) Nil
+  fields x = Cons (Pick x RNil) Nil
 
   widths = [16]
 
@@ -254,8 +273,8 @@ instance MemRep Int16 where
 -- Instance for Boolean
 instance MemRep Bool where
   type Choices Bool = '[Sum '[Finite 2]]
-  choices False = Cons (Pick 0 Empty) Nil
-  choices True  = Cons (Pick 1 Empty) Nil
+  choices False = Cons (Pick 0 RNil) Nil
+  choices True  = Cons (Pick 1 RNil) Nil
 
   type Fields Bool = '[]
   fields _ = Nil
@@ -268,8 +287,8 @@ instance MemRep Bool where
 -- Instance for Maybe
 instance (MemRep a) => MemRep (Maybe a) where
   type Choices (Maybe a) = Sum '[Finite 2] ': Choices a
-  choices Nothing  = Cons (Pick 0 Empty) (emptyChoices @ a)
-  choices (Just x) = Cons (Pick 1 Empty) (choices x)
+  choices Nothing  = Cons (Pick 0 RNil) (emptyChoices @ a)
+  choices (Just x) = Cons (Pick 1 RNil) (choices x)
 
   type Fields (Maybe a) = Fields a
   fields Nothing  = emptyFields @ a
@@ -283,8 +302,8 @@ instance (MemRep a) => MemRep (Maybe a) where
 -- Instance for Either, recursively defined
 instance (MemRep l, MemRep r) => MemRep (Either l r) where
   type Choices (Either l r) = Sum '[Finite 2] ': Eval (ZipWith' (<>) (Choices l) (Choices r))
-  choices (Left lv)  = Cons (Pick 0 Empty) (zipLeft (choices lv) (emptyChoices @ r))
-  choices (Right rv) = Cons (Pick 1 Empty) (zipRight (emptyChoices @ l) (choices rv))
+  choices (Left lv)  = Cons (Pick 0 RNil) (zipLeft (choices lv) (emptyChoices @ r))
+  choices (Right rv) = Cons (Pick 1 RNil) (zipRight (emptyChoices @ l) (choices rv))
 
   type Fields (Either l r) = Eval (ZipWith' (<>) (Fields l) (Fields r))
   fields (Left lv)  = zipLeft (fields lv) (emptyFields @ r)
@@ -302,9 +321,9 @@ instance
     , MemRep r)
     => MemRep (Direction l m r) where
   type Choices (Direction l m r) = Sum '[Finite 3] ': Eval (ZipWith' (<>) (Choices l) (Eval (ZipWith' (<>) (Choices m) (Choices r))))
-  choices (Lef lv) = Cons (Pick 0 Empty) (zipLeft  (choices lv)       (zipLeft  (emptyChoices @ m) (emptyChoices @ r)))
-  choices (Mid mv) = Cons (Pick 1 Empty) (zipRight (emptyChoices @ l) (zipLeft  (choices mv)       (emptyChoices @ r)))
-  choices (Rig rv) = Cons (Pick 2 Empty) (zipRight (emptyChoices @ l) (zipRight (emptyChoices @ m) (choices rv)))
+  choices (Lef lv) = Cons (Pick 0 RNil) (zipLeft  (choices lv)       (zipLeft  (emptyChoices @ m) (emptyChoices @ r)))
+  choices (Mid mv) = Cons (Pick 1 RNil) (zipRight (emptyChoices @ l) (zipLeft  (choices mv)       (emptyChoices @ r)))
+  choices (Rig rv) = Cons (Pick 2 RNil) (zipRight (emptyChoices @ l) (zipRight (emptyChoices @ m) (choices rv)))
 
   type Fields (Direction l m r) = Eval (ZipWith' (<>) (Fields l) (Eval (ZipWith' (<>) (Fields m) (Fields r))))
   fields (Lef lv) = zipLeft  (fields lv)       (zipLeft  (emptyFields @ m) (emptyFields @ r))
@@ -325,8 +344,8 @@ instance
     , MemRep d)
     => MemRep (Mult a b c d) where
   type Choices (Mult a b c d) = Sum '[Finite 2] ': Eval (ZipWith' (<>) (Eval (Choices a ++ Choices b)) (Eval (Choices c ++ Choices d)))
-  choices (Fst av bv) = Cons (Pick 0 Empty) (zipLeft (rvconcat (choices av) (choices bv)) (rvconcat (emptyChoices @ c) (emptyChoices @ d)))
-  choices (Snd cv dv) = Cons (Pick 1 Empty) (zipRight (rvconcat (emptyChoices @ a) (emptyChoices @ b)) (rvconcat (choices cv) (choices dv)))
+  choices (Fst av bv) = Cons (Pick 0 RNil) (zipLeft (rvconcat (choices av) (choices bv)) (rvconcat (emptyChoices @ c) (emptyChoices @ d)))
+  choices (Snd cv dv) = Cons (Pick 1 RNil) (zipRight (rvconcat (emptyChoices @ a) (emptyChoices @ b)) (rvconcat (choices cv) (choices dv)))
 
   type Fields (Mult a b c d) = Eval (ZipWith' (<>) (Eval (Fields a ++ Fields b)) (Eval (Fields c ++ Fields d)))
   fields (Fst av bv) = zipLeft (rvconcat (fields av) (fields bv)) (rvconcat (emptyFields @ c) (emptyFields @ d))
@@ -384,8 +403,8 @@ instance
     , MemRep r
     ) => GMemRep (SOP I '[ '[l], '[r]]) where
   type GChoices (SOP I '[ '[l], '[r]]) =  Sum '[Finite 2] ': Eval (ZipWith' (<>) (Choices l) (Choices r))
-  gchoices (SOP (Z (I lv :* SOP.Nil)))     = Cons (Pick 0 Empty) (zipLeft (choices lv) (emptyChoices @ r))
-  gchoices (SOP (S (Z (I rv :* SOP.Nil)))) = Cons (Pick 1 Empty) (zipRight (emptyChoices @ l) (choices rv))
+  gchoices (SOP (Z (I lv :* SOP.Nil)))     = Cons (Pick 0 RNil) (zipLeft (choices lv) (emptyChoices @ r))
+  gchoices (SOP (S (Z (I rv :* SOP.Nil)))) = Cons (Pick 1 RNil) (zipRight (emptyChoices @ l) (choices rv))
 
   type GFields (SOP I '[ '[l], '[r]]) = Eval (ZipWith' (<>) (Fields l) (Fields r))
   gfields (SOP (Z (I lv :* SOP.Nil)))     = zipLeft  (fields lv)       (emptyFields @ r)
