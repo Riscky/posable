@@ -443,18 +443,17 @@ npFold :: Product ys -> NP Product xs -> Product (Eval (Foldl (++) ys xs))
 npFold acc SOP.Nil   = acc
 npFold acc (x :* xs) = npFold (rvconcat acc x) xs
 
+npMapF :: (All MemRep xs) => NP I xs -> NP Product (Eval (Map AppFields xs))
+npMapF SOP.Nil   = SOP.Nil
+npMapF (x :* xs) = fields (unI x) :* npMapF xs
+
 instance (All MemRep as) => GMemRep (SOP I '[as]) where
   type GChoices (SOP I '[as]) = Eval (Foldl (++) '[] (Eval (Map AppChoices as)))
   gchoices (SOP (Z xs)) = npFold Nil (npMap xs)
   gchoices (SOP (S _)) = error "this is not even possible"
 
   type GFields (SOP I '[as]) = Eval (Foldl (++) '[] (Eval (Map AppFields as)))
-  gfields (SOP (Z SOP.Nil)) = Nil
-  gfields (SOP (Z (I a :* SOP.Nil))) = fields a
-  gfields (SOP (Z (I a :* I b :* SOP.Nil))) = rvconcat (fields a) (fields b)
-  gfields (SOP (Z (I a :* I b :* I c :* SOP.Nil))) = rvconcat (rvconcat (fields a) (fields b)) (fields c)
-  gfields (SOP (Z xs)) = undefined
-
+  gfields (SOP (Z xs)) = npFold Nil (npMapF xs)
   gfields (SOP (S _)) = error "this is not even possible"
 
   gemptyChoices = undefined
