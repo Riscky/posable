@@ -30,16 +30,22 @@ import Generics.SOP
       SOP(SOP),
       NS(Z, S),
       NP((:*)),
-      from )
+      from, unI, hliftA, K (K), hliftA2, HPure (hpure), Prod, HAp (hap), fn, type (:.:), type (-.->) )
 import Data.Int (Int8, Int16, Int32, Int64)
 import Data.Finite.Internal (Finite)
 
-import Fcf ( Eval, Exp, type (++), Map)
+import Fcf ( Eval, Exp, type (++), Map, Foldr)
 
 import qualified GHC.Generics as GHC
 import qualified Generics.SOP as SOP
 
 import Data.Kind
+import Generics.SOP.NP (collapse_NP, map_NP)
+import Generics.SOP.Classes (hliftA2, HPure (hpure))
+import Generics.SOP.Constraint (SListIN)
+
+import Data.Type.Equality ( gcastWith, type (:~:)(..), sym )
+import qualified Fcf.Class.Monoid as FcfM
 
 -----------------------------------------------------------------------
 -- Heterogeneous lists with explicit types
@@ -429,15 +435,17 @@ data Foldl :: (a -> b -> Exp b) -> b -> t a -> Exp b
 type instance Eval (Foldl f y '[]) = y
 type instance Eval (Foldl f y (x ': xs)) = Eval (Foldl f (Eval (f y x)) xs)
 
+npMap :: (All MemRep xs) => NP I xs -> NP Product (Eval (Map AppChoices xs))
+npMap SOP.Nil   = SOP.Nil
+npMap (x :* xs) = choices (unI x) :* npMap xs
+
+npFold :: Product ys -> NP Product xs -> Product (Eval (Foldl (++) ys xs))
+npFold acc SOP.Nil   = acc
+npFold acc (x :* xs) = npFold (rvconcat acc x) xs
 
 instance (All MemRep as) => GMemRep (SOP I '[as]) where
   type GChoices (SOP I '[as]) = Eval (Foldl (++) '[] (Eval (Map AppChoices as)))
-  gchoices (SOP (Z SOP.Nil)) = Nil
-  gchoices (SOP (Z (I a :* SOP.Nil))) = choices a
-  gchoices (SOP (Z (I a :* I b :* SOP.Nil))) = rvconcat (choices a) (choices b)
-  gchoices (SOP (Z (I a :* I b :* I c :* SOP.Nil))) = rvconcat (rvconcat (choices a) (choices b)) (choices c)
-  gchoices (SOP (Z xs)) = undefined
-
+  gchoices (SOP (Z xs)) = npFold Nil (npMap xs)
   gchoices (SOP (S _)) = error "this is not even possible"
 
   type GFields (SOP I '[as]) = Eval (Foldl (++) '[] (Eval (Map AppFields as)))
@@ -458,3 +466,6 @@ data Try a b = Som a | Oth b
 
 data Tuple a b = T a b
                deriving (GHC.Generic, Generic, MemRep)
+
+data Tuple5 a b c d e = T5 a b c d e
+                      deriving (GHC.Generic, Generic, MemRep)
