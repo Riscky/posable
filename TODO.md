@@ -10,3 +10,7 @@ List of things that should or could be done:
 - Write the proposal :)
 - Add a linter
 - Add some tests (quickcheck)
+- Complete gempty functions for tuples
+- Clean up the generic helper functions
+- Fix up finites and indexing with constraints
+- PR@finite to let `finite` understand the class of `Integral`s instead of just `Integer`s

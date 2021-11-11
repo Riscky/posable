@@ -14,6 +14,7 @@
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
+{-# LANGUAGE BangPatterns #-}
 
 module MemRep where
 
@@ -30,9 +31,9 @@ import Generics.SOP
       SOP(SOP),
       NS(Z, S),
       NP((:*)),
-      from, unI, hliftA, K (K), hliftA2, HPure (hpure), Prod, HAp (hap), fn, type (:.:), type (-.->) )
+      from, unI, hliftA, K (K), hliftA2, HPure (hpure), Prod, HAp (hap), fn, type (:.:), type (-.->), HIndex (hindex) )
 import Data.Int (Int8, Int16, Int32, Int64)
-import Data.Finite.Internal (Finite)
+import Data.Finite.Internal (Finite, finite)
 
 import Fcf ( Eval, Exp, type (++), Map, Foldr)
 
@@ -46,6 +47,9 @@ import Generics.SOP.Constraint (SListIN)
 
 import Data.Type.Equality ( gcastWith, type (:~:)(..), sym )
 import qualified Fcf.Class.Monoid as FcfM
+import GHC.Base (Nat)
+import GHC.TypeLits (type (+))
+import Generics.SOP.NS (index_NS)
 
 -----------------------------------------------------------------------
 -- Heterogeneous lists with explicit types
@@ -404,6 +408,33 @@ class GMemRep x where
   gemptyChoices :: Product (GChoices x)
   gemptyFields :: Product (GFields x)
 
+-- adapted Length to lists of lists (sums of products)
+type family Length (xs :: [[*]]) :: Nat where
+  Length '[] = 0
+  Length (x ': xs) = 1 + Length xs
+
+-- typesafe version of index_NS, implementation doesn't compile yet
+-- stolen from https://hackage.haskell.org/package/sop-core-0.5.0.1/docs/src/Data.SOP.Classes.html#hindex
+-- indexNS :: forall f xs x . NS f xs -> Finite (Length xs)
+-- indexNS = go (0 :: Finite (Length xs))
+--   where
+--     go :: forall ys x . Finite x -> NS f ys -> Finite x
+--     go !acc (Z _) = acc
+--     go !acc (S x) = go (acc + 1) x
+
+-- generic instance for sums, incomplete implementation
+-- instance (All2 MemRep as) => GMemRep (SOP I as) where
+--   type GChoices (SOP I as) =  Sum '[Finite (Length as)] ': Eval (Foldl (ZipWith' (<>)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppChoices) as)))))
+--   gchoices (SOP xs) = Cons (Pick (finite $ toInteger $ index_NS xs) RNil) undefined
+
+--   type GFields (SOP I as) = Eval (Foldl (ZipWith' (<>)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) as)))))
+--   gfields (SOP xs) = undefined
+
+--   gemptyChoices = undefined
+--   gemptyFields = undefined
+
+
+-- instance for Either-like types
 instance
     ( MemRep l
     , MemRep r
