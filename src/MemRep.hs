@@ -485,16 +485,17 @@ instance
     , All MemRep r
     ) => GMemRep (SOP I '[ l, r]) where
   type GChoices (SOP I '[ l, r]) =  Sum '[Finite 2] ': Eval (Foldl (ZipWith' (<>)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppChoices) '[ l, r])))))
-  gchoices (SOP (Z ls))     = Cons (Pick 0 Zero) (zipSum (npFold Nil (npMap ls)) (npFold Nil (conv (try' :: NP PC r))))
-  gchoices (SOP (S (Z rs))) = Cons (Pick 1 Zero) (zipSum (npFold Nil (conv (try' :: NP PC l))) (npFold Nil (npMap rs)))
+  gchoices (SOP (Z ls))     = Cons (Pick 0 Zero) (zipSum (npFold Nil (npMap ls)) (npFold Nil (convertPureChoices (pureChoices :: NP PC r))))
+  gchoices (SOP (S (Z rs))) = Cons (Pick 1 Zero) (zipSum (npFold Nil (convertPureChoices (pureChoices :: NP PC l))) (npFold Nil (npMap rs)))
   gchoices (SOP (S (S x))) = error "this is not even possible"
 
   type GFields (SOP I '[ l, r]) = Eval (Foldl (ZipWith' (<>)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) '[ l, r])))))
-  gfields (SOP (Z ls))     = undefined -- zipSum  (fields lv)       (emptyFields @ r)
-  gfields (SOP (S (Z rs))) = undefined --zipSum (emptyFields @ l) (fields rv)
+  gfields (SOP (Z ls))     = zipSum (npFold Nil (npMapF ls)) (npFold Nil (convertPureFields (pureFields :: NP PF r)))
+  gfields (SOP (S (Z rs))) = zipSum (npFold Nil (convertPureFields (pureFields :: NP PF l))) (npFold Nil (npMapF rs))
+  gfields (SOP (S (S x))) = error "this is not even possible"
 
-  gemptyChoices = undefined --Cons (Skip Empty) (zipSum (emptyChoices @ l) (emptyChoices @ r))
-  gemptyFields = undefined --zipSum (emptyFields @ l) (emptyFields @ r)
+  gemptyChoices = Cons (Skip Empty) (zipSum (npFold Nil (convertPureChoices (pureChoices :: NP PC l))) (npFold Nil (convertPureChoices (pureChoices :: NP PC r))))
+  gemptyFields = zipSum (npFold Nil (convertPureFields (pureFields :: NP PF l))) (npFold Nil (convertPureFields (pureFields :: NP PF r)))
 
 data AppChoices :: x -> Exp y
 
@@ -505,11 +506,6 @@ type instance Eval (AppChoices x) = Choices x
 data AppFields :: x -> Exp y
 
 type instance Eval (AppFields x) = Fields x
-
-newtype PC a = PC (Product (Choices a))
-
-unPC :: PC a -> Product (Choices a)
-unPC (PC x) = x
 
 -- from https://hackage.haskell.org/package/first-class-families-0.8.0.1/docs/src/Fcf.Class.Foldable.html#Foldr
 -- why use this instead of FoldR?
@@ -529,28 +525,50 @@ instance (All MemRep as) => GMemRep (SOP I '[as]) where
   gfields (SOP (Z xs)) = npFold Nil (npMapF xs)
   gfields (SOP (S _)) = error "this is not even possible"
 
-  gemptyChoices = undefined
-  gemptyFields = undefined
+  gemptyChoices = npFold Nil (convertPureChoices (pureChoices :: NP PC as))
+  gemptyFields = npFold Nil (convertPureFields (pureFields :: NP PF as))
 
 
 -- foldPop :: NP PC xss -> Product (Eval (Foldl (++) '[] (Eval (Map AppChoices yss))))
 -- foldPop x = npFold Nil (npMap xinner)
 
-conv :: NP PC xs -> NP Product (Eval (Map AppChoices xs))
-conv SOP.Nil   = SOP.Nil
-conv (x :* xs) = unPC x :* conv xs
+-- functions to generate pure Choices and Fields
+newtype PC a = PC (Product (Choices a))
 
-try' :: (All MemRep xs) => NP PC xs
-try' = cpure_NP (Proxy :: Proxy MemRep) emptyChoices'
+unPC :: PC a -> Product (Choices a)
+unPC (PC x) = x
 
+convertPureChoices :: NP PC xs -> NP Product (Eval (Map AppChoices xs))
+convertPureChoices SOP.Nil   = SOP.Nil
+convertPureChoices (x :* xs) = unPC x :* convertPureChoices xs
+
+pureChoices :: (All MemRep xs) => NP PC xs
+pureChoices = cpure_NP (Proxy :: Proxy MemRep) emptyChoices'
+
+emptyChoices' :: forall x . (MemRep x) => PC x
+emptyChoices' = PC $ emptyChoices @ x
+
+newtype PF a = PF (Product (Fields a))
+
+unPF :: PF a -> Product (Fields a)
+unPF (PF x) = x
+
+convertPureFields :: NP PF xs -> NP Product (Eval (Map AppFields xs))
+convertPureFields SOP.Nil   = SOP.Nil
+convertPureFields (x :* xs) = unPF x :* convertPureFields xs
+
+pureFields :: (All MemRep xs) => NP PF xs
+pureFields = cpure_NP (Proxy :: Proxy MemRep) emptyFields'
+
+emptyFields' :: forall x . (MemRep x) => PF x
+emptyFields' = PF $ emptyFields @ x
+
+-- unused random stuff
 xinner :: forall k (f :: k -> *) (xss :: [[k]]). POP f xss -> NP (NP f) xss
 xinner = unPOP
 
 try :: (All2 MemRep xss) => POP PC xss
 try = cpure_POP (Proxy :: Proxy MemRep) emptyChoices'
-
-emptyChoices' :: forall x . (MemRep x) => PC x
-emptyChoices' = PC $ emptyChoices @ x
 
 -- either equivalent type:
 data Try a b = Som a | Oth b
