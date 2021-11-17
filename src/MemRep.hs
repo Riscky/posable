@@ -14,7 +14,6 @@
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
-{-# LANGUAGE BangPatterns #-}
 
 module MemRep where
 
@@ -31,7 +30,7 @@ import Generics.SOP
       SOP(SOP),
       NS(Z, S),
       NP((:*)),
-      from, unI, hliftA, K (K), hliftA2, HPure (hpure, hcpure), Prod, HAp (hap), fn, type (:.:), type (-.->), HIndex (hindex), POP, Proxy (Proxy), HExpand (hexpand), mapIK, unSOP, Top, SListI, unPOP )
+      from, unI, hliftA, K (K), hliftA2, HPure (hpure, hcpure), Prod, HAp (hap), fn, type (-.->), HIndex (hindex), POP, Proxy (Proxy), HExpand (hexpand), mapIK, unSOP, Top, SListI, unPOP )
 import Data.Int (Int8, Int16, Int32, Int64)
 import Data.Finite.Internal (Finite, finite)
 
@@ -41,7 +40,7 @@ import qualified GHC.Generics as GHC
 import qualified Generics.SOP as SOP
 
 import Data.Kind
-import Generics.SOP.NP (collapse_NP, map_NP, pure_POP, liftA_NP, cpure_POP)
+import Generics.SOP.NP (collapse_NP, map_NP, pure_POP, liftA_NP, cpure_POP, cpure_NP)
 import Generics.SOP.Classes (hliftA2, HPure (hpure))
 import Generics.SOP.Constraint (SListIN)
 
@@ -486,12 +485,13 @@ instance
     , All MemRep r
     ) => GMemRep (SOP I '[ l, r]) where
   type GChoices (SOP I '[ l, r]) =  Sum '[Finite 2] ': Eval (Foldl (ZipWith' (<>)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppChoices) '[ l, r])))))
-  gchoices (SOP (Z (ls)))     = undefined -- Cons (Pick 0 Zero) (zipSum (npFold Nil (npMap ls)) undefined ) --(choices lv) (emptyChoices @ r))
-  gchoices (SOP (S (Z (rs)))) = Cons (Pick 1 Zero) undefined -- (zipSum (emptyChoices @ l) (choices rv))
+  gchoices (SOP (Z ls))     = Cons (Pick 0 Zero) (zipSum (npFold Nil (npMap ls)) (npFold Nil (conv (try' :: NP PC r))))
+  gchoices (SOP (S (Z rs))) = Cons (Pick 1 Zero) (zipSum (npFold Nil (conv (try' :: NP PC l))) (npFold Nil (npMap rs)))
+  gchoices (SOP (S (S x))) = error "this is not even possible"
 
   type GFields (SOP I '[ l, r]) = Eval (Foldl (ZipWith' (<>)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) '[ l, r])))))
-  gfields (SOP (Z (ls)))     = undefined -- zipSum  (fields lv)       (emptyFields @ r)
-  gfields (SOP (S (Z (rs)))) = undefined --zipSum (emptyFields @ l) (fields rv)
+  gfields (SOP (Z ls))     = undefined -- zipSum  (fields lv)       (emptyFields @ r)
+  gfields (SOP (S (Z rs))) = undefined --zipSum (emptyFields @ l) (fields rv)
 
   gemptyChoices = undefined --Cons (Skip Empty) (zipSum (emptyChoices @ l) (emptyChoices @ r))
   gemptyFields = undefined --zipSum (emptyFields @ l) (emptyFields @ r)
@@ -507,6 +507,9 @@ data AppFields :: x -> Exp y
 type instance Eval (AppFields x) = Fields x
 
 newtype PC a = PC (Product (Choices a))
+
+unPC :: PC a -> Product (Choices a)
+unPC (PC x) = x
 
 -- from https://hackage.haskell.org/package/first-class-families-0.8.0.1/docs/src/Fcf.Class.Foldable.html#Foldr
 -- why use this instead of FoldR?
@@ -533,6 +536,13 @@ instance (All MemRep as) => GMemRep (SOP I '[as]) where
 -- foldPop :: NP PC xss -> Product (Eval (Foldl (++) '[] (Eval (Map AppChoices yss))))
 -- foldPop x = npFold Nil (npMap xinner)
 
+conv :: NP PC xs -> NP Product (Eval (Map AppChoices xs))
+conv SOP.Nil   = SOP.Nil
+conv (x :* xs) = unPC x :* conv xs
+
+try' :: (All MemRep xs) => NP PC xs
+try' = cpure_NP (Proxy :: Proxy MemRep) emptyChoices'
+
 xinner :: forall k (f :: k -> *) (xss :: [[k]]). POP f xss -> NP (NP f) xss
 xinner = unPOP
 
@@ -554,3 +564,7 @@ data Tuple5 a b c d e = T5 a b c d e
 
 data Unit = Unit
           deriving (GHC.Generic, Generic, MemRep)
+
+data MultiSum x y = First x y
+                  | Second y x
+                  deriving (GHC.Generic, Generic, MemRep)
