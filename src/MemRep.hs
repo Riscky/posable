@@ -14,6 +14,8 @@
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
+{-# OPTIONS_GHC -Wno-missing-methods #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module MemRep where
 
@@ -66,16 +68,19 @@ rvconcat :: Product x -> Product y -> Product (Eval (x ++ y))
 rvconcat Nil         ys = ys
 rvconcat (Cons x xs) ys = Cons x (rvconcat xs ys)
 
+-- wrap Product in an Exp to use it as an argument to higher order type functions
+data AppProduct :: x -> Exp y
+
+type instance Eval (AppProduct x) = Product x
+
 -----------------------------------------------------------------------
 -- Typelevel sums with a empty value
--- TODO: naming
--- The semantics of this thing is: first Pick is relevant value, if there
--- are more Pick they can be replaced by Skips
 data Sum :: [*] -> * where
   Pick :: x -> Remainder xs -> Sum (x ': xs)
   Skip :: Sum xs -> Sum (x ': xs)
   Empty :: Sum '[]
 
+-- the remainder makes it possible to known the length of the sum at runtime
 data Remainder :: [*] -> * where
   Succ :: Remainder xs -> Remainder (x ': xs)
   Zero  :: Remainder '[]
@@ -84,6 +89,9 @@ instance (All Show x) => Show (Sum x) where
   show (Pick x xs) = show x
   show (Skip x)    = show x
   show Empty       = "Ø"
+
+-----------------------------------------------------------------------
+-- Functions on Products and Sums
 
 -- stolen from https://hackage.haskell.org/package/first-class-families-0.8.0.1
 -- and adapted to keep the length of the longest list
@@ -101,24 +109,24 @@ type instance Eval (ZipWith' _f _as '[]) = _as
 type instance Eval (ZipWith' f (a ': as) (b ': bs)) =
   Eval (f a b) ': Eval (ZipWith' f as bs)
 
-
+-- unused tryout to create a non higher-order ZipWith'
 -- we probably need injective type families here: https://gitlab.haskell.org/ghc/ghc/-/wikis/injective-type-families
 type family ZipSums (as :: [a]) (bs :: [b]) :: [c] where
   ZipSums '[]        bs       = bs
   ZipSums as        '[]       = as
   ZipSums (a ': as) (b ': bs) = a </> b ': ZipSums as bs
 
-data (<>) :: * -> * -> Exp *
-
-type instance Eval ((<>) x y) = x </> y
-
 -- Type level append of Sum's
 -- We might want to use the correct operator here, but for now this works well enough
 type family (a :: *) </> (b :: *) :: * where
   Sum a </> Sum b = Sum (Eval (a ++ b))
 
+data (<>) :: * -> * -> Exp *
+
+type instance Eval ((<>) x y) = x </> y
+
 -- value level implementation of ZipWith' (<>)
--- takes the leftmost zip that is encountered
+-- takes the leftmost Pick that is encountered for each element of the Product
 zipSum :: Product l -> Product r -> Product (Eval (ZipWith' (<>) l r))
 zipSum (Cons (x :: Sum a) xs) (Cons (y :: b) ys) = Cons (takeS x y) (zipSum xs ys)
 zipSum Nil ys = ys
@@ -185,25 +193,10 @@ class MemRep x where
     ) => Product (Fields x)
   emptyFields  = gemptyFields @ (SOP I (Code x))
 
-------------------------------------------------------------------------
--- Some types to gain understanding of MemRep instances for more complex
--- types
-
-data Direction l m r = Lef l
-                     | Mid m
-                     | Rig r
-
-data Mult a b c d = Fst a b
-                  | Snd c d
-
 -----------------------------------------------------------------------
 -- Instances of MemRep for machine types
 
--- Sadly, this definition does not work but gives the following error:
--- 'Conflicting family instance declarations'
--- as soon as any other instance of Choices or Fields is declared
--- This is related to this GHC issue: https://gitlab.haskell.org/ghc/ghc/-/issues/4259
--- and won't be fixed very soon probably
+-- Sadly, this definition due to overlapping instances:
 
 -- instance Base x => MemRep x where
 --   type Choices x = '[]
@@ -263,122 +256,6 @@ instance MemRep Int16 where
   emptyChoices = Nil
   emptyFields = Cons (Skip Empty) Nil
 
------------------------------------------------------------------------
--- Instances of MemRep that should be generically derived in the future
-
--- Instance for Boolean
-instance MemRep Bool where
-  type Choices Bool = '[Sum '[Finite 2]]
-  choices False = Cons (Pick 0 Zero) Nil
-  choices True  = Cons (Pick 1 Zero) Nil
-
-  type Fields Bool = '[]
-  fields _ = Nil
-
-  widths = []
-
-  emptyChoices = Cons (Skip Empty) Nil
-  emptyFields  = Nil
-
--- Instance for Maybe
-instance (MemRep a) => MemRep (Maybe a) where
-  type Choices (Maybe a) = Sum '[Finite 2] ': Choices a
-  choices Nothing  = Cons (Pick 0 Zero) (emptyChoices @ a)
-  choices (Just x) = Cons (Pick 1 Zero) (choices x)
-
-  type Fields (Maybe a) = Fields a
-  fields Nothing  = emptyFields @ a
-  fields (Just x) = fields x
-
-  widths = widths @ a
-
-  emptyChoices = Cons (Skip Empty) (emptyChoices @ a)
-  emptyFields  = emptyFields @ a
-
--- Instance for Either, recursively defined
-instance (MemRep l, MemRep r) => MemRep (Either l r) where
-  type Choices (Either l r) = Sum '[Finite 2] ': Eval (ZipWith' (<>) (Choices l) (Choices r))
-  choices (Left lv)  = Cons (Pick 0 Zero) (zipSum (choices lv) (emptyChoices @ r))
-  choices (Right rv) = Cons (Pick 1 Zero) (zipSum (emptyChoices @ l) (choices rv))
-
-  type Fields (Either l r) = Eval (ZipWith' (<>) (Fields l) (Fields r))
-  fields (Left lv)  = zipSum (fields lv) (emptyFields @ r)
-  fields (Right rv) = zipSum (emptyFields @ l) (fields rv)
-
-  widths = zipWith max (widths @ l) (widths @ r)
-
-  emptyChoices = Cons (Skip Empty) (zipSum (emptyChoices @ l) (emptyChoices @ r))
-  emptyFields = zipSum (emptyFields @ l) (emptyFields @ r)
-
--- Instance for Direction type
-instance
-    ( MemRep l
-    , MemRep m
-    , MemRep r)
-    => MemRep (Direction l m r) where
-  type Choices (Direction l m r) = Sum '[Finite 3] ': Eval (ZipWith' (<>) (Choices l) (Eval (ZipWith' (<>) (Choices m) (Choices r))))
-  choices (Lef lv) = Cons (Pick 0 Zero) (zipSum  (choices lv)       (zipSum  (emptyChoices @ m) (emptyChoices @ r)))
-  choices (Mid mv) = Cons (Pick 1 Zero) (zipSum (emptyChoices @ l) (zipSum  (choices mv)       (emptyChoices @ r)))
-  choices (Rig rv) = Cons (Pick 2 Zero) (zipSum (emptyChoices @ l) (zipSum (emptyChoices @ m) (choices rv)))
-
-  type Fields (Direction l m r) = Eval (ZipWith' (<>) (Fields l) (Eval (ZipWith' (<>) (Fields m) (Fields r))))
-  fields (Lef lv) = zipSum  (fields lv)       (zipSum  (emptyFields @ m) (emptyFields @ r))
-  fields (Mid mv) = zipSum (emptyFields @ l) (zipSum  (fields mv)       (emptyFields @ r))
-  fields (Rig rv) = zipSum (emptyFields @ l) (zipSum (emptyFields @ m) (fields rv))
-
-  widths = zipWith max (widths @ l) (zipWith max (widths @ m) (widths @ r))
-
-  emptyChoices = Cons (Skip Empty) (zipSum (emptyChoices @ l) (zipSum (emptyChoices @ m) (emptyChoices @ r)))
-  emptyFields = zipSum (emptyFields @ l) (zipSum (emptyFields @ m) (emptyFields @ r))
-
-
--- Instance for Mult type
-instance
-    ( MemRep a
-    , MemRep b
-    , MemRep c
-    , MemRep d)
-    => MemRep (Mult a b c d) where
-  type Choices (Mult a b c d) = Sum '[Finite 2] ': Eval (ZipWith' (<>) (Eval (Choices a ++ Choices b)) (Eval (Choices c ++ Choices d)))
-  choices (Fst av bv) = Cons (Pick 0 Zero) (zipSum (rvconcat (choices av) (choices bv)) (rvconcat (emptyChoices @ c) (emptyChoices @ d)))
-  choices (Snd cv dv) = Cons (Pick 1 Zero) (zipSum (rvconcat (emptyChoices @ a) (emptyChoices @ b)) (rvconcat (choices cv) (choices dv)))
-
-  type Fields (Mult a b c d) = Eval (ZipWith' (<>) (Eval (Fields a ++ Fields b)) (Eval (Fields c ++ Fields d)))
-  fields (Fst av bv) = zipSum (rvconcat (fields av) (fields bv)) (rvconcat (emptyFields @ c) (emptyFields @ d))
-  fields (Snd cv dv) = zipSum (rvconcat (emptyFields @ a) (emptyFields @ b)) (rvconcat (fields cv) (fields dv))
-
-  widths = zipWith max (widths @ a ++ widths @ b) (widths @ c ++ widths @ d)
-
-  emptyChoices = Cons (Skip Empty) (zipSum (rvconcat (emptyChoices @ a) (emptyChoices @ b)) (rvconcat (emptyChoices @ c) (emptyChoices @ d)))
-  emptyFields = zipSum (rvconcat (emptyFields @ a) (emptyFields @ b)) (rvconcat (emptyFields @ c) (emptyFields @ d))
-
--- Instance for product types (tuples)
--- Recursively defined, because concatenation is a whole lot easier then zipWith (++)
-instance (MemRep x, MemRep y) => MemRep (x, y) where
-  type Choices (x,y) = Eval (Choices x ++ Choices y)
-  choices (x,y) = rvconcat (choices x) (choices y)
-
-  type Fields (x, y) = Eval (Fields x ++ Fields y)
-  fields (x,y) = rvconcat (fields x) (fields y)
-
-  widths = widths @ x ++ widths @ y
-
-  emptyChoices = rvconcat (emptyChoices @ x) (emptyChoices @ y)
-  emptyFields = rvconcat (emptyFields @ x) (emptyFields @ y)
-
--- Instance for 3-tuples
-instance (MemRep x, MemRep y, MemRep z) => MemRep (x, y, z) where
-  type Choices (x,y,z) = Eval (Choices x ++ Eval (Choices y ++ Choices z))
-  choices (x,y,z) = rvconcat (choices x) $ rvconcat (choices y) (choices z)
-
-  type Fields (x,y,z) = Eval (Fields x ++ Eval (Fields y ++ Fields z))
-  fields (x,y,z) = rvconcat (fields x) $ rvconcat (fields y) (fields z)
-
-  widths = widths @ x ++ widths @ y ++ widths @ z
-
-  emptyChoices = rvconcat (emptyChoices @ x) $ rvconcat (emptyChoices @ y) (emptyChoices @ z)
-  emptyFields = rvconcat (emptyFields @ x) $ rvconcat (emptyFields @ y) (emptyFields @ z)
-
 --------------------------------------------------------------
 -- Generics
 
@@ -394,6 +271,9 @@ class GMemRep x where
   gemptyChoices :: Product (GChoices x)
   gemptyFields :: Product (GFields x)
 
+-----------------------------------------------------------------------
+-- Length of typelevel lists
+
 -- adapted Length to lists of lists (sums of products)
 type family Length (xs :: [[*]]) :: Nat where
   Length '[] = 0
@@ -408,6 +288,8 @@ type family Length (xs :: [[*]]) :: Nat where
 --     go !acc (Z _) = acc
 --     go !acc (S x) = go (acc + 1) x
 
+-----------------------------------------------------------------------
+-- Whole bit of tryout code, to be removed
 sopMap :: (All2 MemRep xs) => SOP I xs -> SOP Product (Eval (Map (Map AppChoices) xs))
 sopMap = undefined
 
@@ -428,10 +310,6 @@ purePOP' x = expand_SOP (K ()) $ sopHap x
 -- -- sopHap' :: (All SOP.SListI xss) => SOP I xss -> SOP Product (Eval (Map (Map AppChoices) xss))
 -- sopHap' :: (All SListI xss, All2 MemRep xss) => SOP I xss -> SOP (Product <*> Choices <*> Pure) xss
 -- sopHap' = mapSOP apChoices
-
-data AppProduct :: x -> Exp y
-
-type instance Eval (AppProduct x) = Product x
 
 -- Expected type: NP I x -> NP (Eval (AppProduct (Map AppChoices))) x
 -- Actual type:   NP I x -> NP Product (Eval     (Map AppChoices    x))
@@ -479,7 +357,7 @@ npMapF (x :* xs) = fields (unI x) :* npMapF xs
 --   gemptyChoices = undefined
 --   gemptyFields = undefined
 
--- instance for Either-like types
+-- generic instance for binary sums
 instance
     ( All MemRep l
     , All MemRep r
@@ -515,7 +393,7 @@ data Foldl :: (a -> b -> Exp b) -> b -> t a -> Exp b
 type instance Eval (Foldl f y '[]) = y
 type instance Eval (Foldl f y (x ': xs)) = Eval (Foldl f (Eval (f y x)) xs)
 
--- generic instance for 1-sums (tuples)
+-- generic instance for unary sums (tuples)
 instance (All MemRep as) => GMemRep (SOP I '[as]) where
   type GChoices (SOP I '[as]) = Eval (Foldl (++) '[] (Eval (Map AppChoices as)))
   gchoices (SOP (Z xs)) = npFold Nil (npMap xs)
@@ -570,7 +448,8 @@ xinner = unPOP
 try :: (All2 MemRep xss) => POP PC xss
 try = cpure_POP (Proxy :: Proxy MemRep) emptyChoices'
 
--- either equivalent type:
+-----------------------------------------------------------------------
+-- Instances for some made up datatypes
 data Try a b = Som a | Oth b
              deriving (GHC.Generic, Generic, MemRep)
 
@@ -586,3 +465,11 @@ data Unit = Unit
 data MultiSum x y = First x y
                   | Second y x
                   deriving (GHC.Generic, Generic, MemRep)
+
+-----------------------------------------------------------------------
+-- Instances for common Haskell datatypes
+deriving instance MemRep Bool
+deriving instance MemRep x => MemRep (Maybe x)
+deriving instance (MemRep l, MemRep r) => MemRep (Either l r)
+deriving instance MemRep ()
+deriving instance (MemRep a, MemRep b) => MemRep (a,b)
