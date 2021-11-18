@@ -17,7 +17,7 @@
 {-# OPTIONS_GHC -Wno-missing-methods #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
-module MemRep where
+module MemRep (Product(..), Sum(..), MemRep(..), Finite, Remainder(..)) where
 
 import Generics.SOP
     ( All,
@@ -58,6 +58,8 @@ data Product xs where
   Nil :: Product '[]
   Cons :: (x ~ Sum a) => x -> Product ys -> Product (x ': ys)
 
+deriving instance (All Eq xs) => Eq (Product xs)
+
 instance (All Show xs) =>  Show (Product xs) where
   show Nil = "[]"
   show (Cons a as) = show a ++ " : " ++ show as
@@ -80,10 +82,14 @@ data Sum :: [*] -> * where
   Skip :: Sum xs -> Sum (x ': xs)
   Empty :: Sum '[]
 
+deriving instance (All Eq xs) => Eq (Sum xs)
+
 -- the remainder makes it possible to known the length of the sum at runtime
 data Remainder :: [*] -> * where
   Succ :: Remainder xs -> Remainder (x ': xs)
   Zero  :: Remainder '[]
+
+deriving instance Eq (Remainder xs)
 
 instance (All Show x) => Show (Sum x) where
   show (Pick x xs) = show x
