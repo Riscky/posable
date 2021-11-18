@@ -28,29 +28,25 @@ import Generics.SOP
       All2,
       Code,
       Generic,
-      I(I),
+      I,
       SOP(SOP),
       NS(Z, S),
       NP((:*)),
-      from, unI, hliftA, K (K), hliftA2, HPure (hpure, hcpure), Prod, HAp (hap), fn, type (-.->), HIndex (hindex), POP, Proxy (Proxy), HExpand (hexpand), mapIK, unSOP, Top, SListI, unPOP )
-import Data.Int (Int8, Int16, Int32, Int64)
-import Data.Finite.Internal (Finite, finite)
+      from, unI, K (K), POP, Proxy (Proxy), mapIK, unSOP, Top, SListI, unPOP )
+import Data.Int (Int8, Int16)
+import Data.Finite.Internal (Finite)
 
-import Fcf ( Eval, Exp, type (++), Map, Foldr, type (<*>), type (=<<), type (<=<), type (<$>), Pure)
+import Fcf ( Eval, Exp, type (++), Map)
 
 import qualified GHC.Generics as GHC
 import qualified Generics.SOP as SOP
 
-import Data.Kind
-import Generics.SOP.NP (collapse_NP, map_NP, pure_POP, liftA_NP, cpure_POP, cpure_NP)
-import Generics.SOP.Classes (hliftA2, HPure (hpure))
-import Generics.SOP.Constraint (SListIN)
+import Data.Kind ()
+import Generics.SOP.NP (cpure_POP, cpure_NP)
 
-import Data.Type.Equality ( gcastWith, type (:~:)(..), sym )
-import qualified Fcf.Class.Monoid as FcfM
 import GHC.Base (Nat)
 import GHC.TypeLits (type (+))
-import Generics.SOP.NS (index_NS, ap_SOP, expand_SOP, liftA_NS, unSOP, liftA_SOP)
+import Generics.SOP.NS (expand_SOP, liftA_NS, liftA_SOP)
 
 -----------------------------------------------------------------------
 -- Heterogeneous lists with explicit types
@@ -92,9 +88,9 @@ data Remainder :: [*] -> * where
 deriving instance Eq (Remainder xs)
 
 instance (All Show x) => Show (Sum x) where
-  show (Pick x xs) = show x
-  show (Skip x)    = show x
-  show Empty       = "Ø"
+  show (Pick x _) = show x
+  show (Skip x)   = show x
+  show Empty      = "Ø"
 
 -----------------------------------------------------------------------
 -- Functions on Products and Sums
@@ -148,7 +144,7 @@ takeS' :: Remainder l -> Sum r -> Remainder (Eval (l ++ r))
 takeS' (Succ ls) r           = Succ (takeS' ls r)
 takeS' Zero      Empty       = Zero
 takeS' Zero      (Skip rs)   = Succ (takeS' Zero rs)
-takeS' Zero      (Pick r rs) = Succ (takeS'' Zero rs)
+takeS' Zero      (Pick _ rs) = Succ (takeS'' Zero rs)
 
 takeS'' :: Remainder l -> Remainder r -> Remainder (Eval (l ++ r))
 takeS'' (Succ ls) r = Succ (takeS'' ls r)
@@ -371,19 +367,17 @@ instance
   type GChoices (SOP I '[ l, r]) =  Sum '[Finite 2] ': Eval (Foldl (ZipWith' (<>)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppChoices) '[ l, r])))))
   gchoices (SOP (Z ls))     = Cons (Pick 0 Zero) (zipSum (npFold Nil (npMap ls)) (npFold Nil (convertPureChoices (pureChoices :: NP PC r))))
   gchoices (SOP (S (Z rs))) = Cons (Pick 1 Zero) (zipSum (npFold Nil (convertPureChoices (pureChoices :: NP PC l))) (npFold Nil (npMap rs)))
-  gchoices (SOP (S (S x))) = error "this is not even possible"
+  gchoices (SOP (S (S _))) = error "this is not even possible"
 
   type GFields (SOP I '[ l, r]) = Eval (Foldl (ZipWith' (<>)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) '[ l, r])))))
   gfields (SOP (Z ls))     = zipSum (npFold Nil (npMapF ls)) (npFold Nil (convertPureFields (pureFields :: NP PF r)))
   gfields (SOP (S (Z rs))) = zipSum (npFold Nil (convertPureFields (pureFields :: NP PF l))) (npFold Nil (npMapF rs))
-  gfields (SOP (S (S x))) = error "this is not even possible"
+  gfields (SOP (S (S _))) = error "this is not even possible"
 
   gemptyChoices = Cons (Skip Empty) (zipSum (npFold Nil (convertPureChoices (pureChoices :: NP PC l))) (npFold Nil (convertPureChoices (pureChoices :: NP PC r))))
   gemptyFields = zipSum (npFold Nil (convertPureFields (pureFields :: NP PF l))) (npFold Nil (convertPureFields (pureFields :: NP PF r)))
 
 data AppChoices :: x -> Exp y
-
-data AppPC :: Exp y
 
 type instance Eval (AppChoices x) = Choices x
 
