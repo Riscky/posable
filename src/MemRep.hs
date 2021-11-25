@@ -292,12 +292,68 @@ instance (MemRep l, MemRep r) => MemRep (Either l r) where
 
   widths = zipWith max (widths @ l) (widths @ r)
 
-  -- fromMemRep (Cons (Pick 0 Zero) cs) fs = Left _
-  --                                       where x = splitLeft fs (emptyFields @ l) (emptyFields @ r)
-  -- fromMemRep (Cons (Pick 1 Zero) cs) fs = Right _
+  fromMemRep (Cons (Pick 0 Zero) cs) fs = Left (fromMemRep lcs lfs)
+                                        where
+                                          lcs = splitLeftWith cs (emptyChoices @ l) (emptyChoices @ r)
+                                          lfs = splitLeftWith fs (emptyFields @ l)  (emptyFields @ r)
+  fromMemRep (Cons (Pick 1 Zero) cs) fs = Right undefined
+  fromMemRep (Cons _             _)  _  = error "non existing index encountered"
 
   emptyChoices = Cons (Skip Empty) (zipSum (emptyChoices @ l) (emptyChoices @ r))
   emptyFields = zipSum (emptyFields @ l) (emptyFields @ r)
+
+
+splitLeftWith :: Product (Eval (ZipWith' (<>) l r)) -> Product l -> Product r -> Product l
+splitLeftWith (Cons x xs) (Cons l ls) (Cons r rs) = Cons (splitSumLeft x l r) (splitLeftWith xs ls rs)
+splitLeftWith x           _         Nil  = x
+splitLeftWith (Cons _ _)  Nil       _    = Nil
+
+-- splitRightWith :: Product (Eval (ZipWith' (<>) l r)) -> Product l -> Product r -> Product r
+-- splitRightWith (Cons x xs) (Cons l ls) (Cons r rs) = Cons _ (splitRightWith xs ls rs)
+-- splitRightWith x           Nil          _ = x
+
+splitSumLeft :: Sum (Eval (l ++ r)) -> Sum l -> Sum r -> Sum l
+splitSumLeft (Pick x xs) (Pick _ ls) rs = Pick x (splitSumLeftR xs ls rs)
+splitSumLeft (Pick x xs) (Skip   ls) rs = Pick x (splitSumLeftR2 xs ls rs)
+splitSumLeft (Skip   xs) (Pick _ ls) rs = Skip (splitSumLeftR4 xs ls rs)
+splitSumLeft (Skip   xs) (Skip   ls) rs = Skip (splitSumLeft xs ls rs)
+splitSumLeft _           Empty       _  = Empty
+
+splitSumLeftR4 :: Sum (Eval (l ++ r)) -> Remainder l -> Sum r -> Sum l
+splitSumLeftR4 _           Zero      _  = Empty
+splitSumLeftR4 (Pick x xs) (Succ ls) rs = Pick x (splitSumLeftR3 xs ls rs)
+splitSumLeftR4 (Skip   xs) (Succ ls) rs = Skip (splitSumLeftR4 xs ls rs)
+
+splitSumLeftR :: Remainder (Eval (l ++ r)) -> Remainder l -> Sum r -> Remainder l
+splitSumLeftR (Succ xs) (Succ ls) rs = Succ (splitSumLeftR xs ls rs)
+splitSumLeftR _          Zero     _ = Zero
+
+splitSumLeftR2 :: Remainder (Eval (l ++ r)) -> Sum l -> Sum r -> Remainder l
+splitSumLeftR2 (Succ xs) (Pick _ ls) rs = Succ (splitSumLeftR3 xs ls rs)
+splitSumLeftR2 _         Empty       _  = Zero
+splitSumLeftR2 (Succ xs) (Skip ls)   rs = Succ (splitSumLeftR2 xs ls rs)
+
+splitSumLeftR3 :: Remainder (Eval (l ++ r)) -> Remainder l -> Sum r -> Remainder l
+splitSumLeftR3 (Succ xs) (Succ ls) rs = Succ (splitSumLeftR3 xs ls rs)
+splitSumLeftR3 _         Zero     _ = Zero
+
+-- splitLeft :: Product (Eval (l ++ r)) -> Product l -> Product r -> Product l
+-- splitLeft (Cons x xs) (Cons _ ls) rs = Cons x (splitLeft xs ls rs)
+-- splitLeft _           Nil         _  = Nil
+
+-- splitRight :: Product (Eval (l ++ r)) -> Product l -> Product r -> Product r
+-- splitRight (Cons _ xs) (Cons _ ls) rs = splitRight xs ls rs
+-- splitRight x           Nil         _  = x
+
+-- -- return leftmost Pick or Empty if no Pick is found
+--   takeS :: Sum l -> Sum r -> Sum (Eval (l ++ r))
+--   takeS (Pick l ls) r = Pick l (takeS' ls r)
+--   takeS (Skip ls)   r = Skip (takeS ls r)
+--   takeS Empty       r = r
+-- zipSum :: Product l -> Product r -> Product (Eval (ZipWith' (<>) l r))
+-- zipSum (Cons (x :: Sum a) xs) (Cons (y :: b) ys) = Cons (takeS x y) (zipSum xs ys)
+-- zipSum Nil ys = ys
+-- zipSum xs Nil = xs
 
 -- instance (MemRep a, MemRep b) => MemRep (Either (a, b) (b, a)) where
 --   type Choices (Either (a, b) (b, a)) = Sum '[Finite 2] ': Eval (ZipWith' (<>) (Choices (a, b)) (Choices (b, a)))
