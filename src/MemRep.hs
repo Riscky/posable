@@ -154,6 +154,86 @@ takeS'' :: Remainder l -> Remainder r -> Remainder (Eval (l ++ r))
 takeS'' (Succ ls) r = Succ (takeS'' ls r)
 takeS'' Zero      r = r
 
+
+--------------------------------------------------------------
+-- Functions to deal with splitting values back into existence
+--
+-- Includes an ungodly amount of boilerplate
+--
+splitLeftWith :: Product (Eval (ZipWith' (<>) l r)) -> Product l -> Product r -> Product l
+splitLeftWith (Cons x xs) (Cons l ls) (Cons r rs) = Cons (splitSumLeft x l r) (splitLeftWith xs ls rs)
+splitLeftWith x           _         Nil  = x
+splitLeftWith (Cons _ _)  Nil       _    = Nil
+
+splitRightWith :: Product (Eval (ZipWith' (<>) l r)) -> Product l -> Product r -> Product r
+splitRightWith (Cons x xs) (Cons l ls) (Cons r rs) = Cons (splitSumRight x l r) (splitRightWith xs ls rs)
+splitRightWith x           Nil         _           = x
+splitRightWith _           _           Nil         = Nil
+
+-- Start of ugly boilerplate to deal with sums and remainders
+splitSumRight :: Sum (Eval (l ++ r)) -> Sum l -> Sum r -> Sum r
+splitSumRight x Empty _ = x
+splitSumRight (Skip xs) (Skip ls) rs = splitSumRight xs ls rs
+splitSumRight (Pick _ xs) (Skip ls) rs = splitSumRight2 xs ls rs
+splitSumRight (Skip xs) (Pick _ ls) rs = splitSumRight3 xs ls rs
+splitSumRight (Pick _ xs) (Pick _ ls) rs = splitSumRight4 xs ls rs
+
+splitSumRight4 :: Remainder (Eval (l ++ r)) -> Remainder l -> Sum r -> Sum r
+splitSumRight4 Zero      Zero      _           = Empty
+splitSumRight4 (Succ xs) Zero      (Skip rs)   = Skip (splitSumRight4 xs Zero rs)
+splitSumRight4 (Succ xs) Zero      (Pick _ rs) = Skip (splitSumRight5 xs Zero rs)
+splitSumRight4 (Succ xs) (Succ ls) rs          = splitSumRight4 xs ls rs
+
+splitSumRight5 :: Remainder (Eval (l ++ r)) -> Remainder l -> Remainder r -> Sum r
+splitSumRight5 _ _ Zero = Empty
+splitSumRight5 (Succ xs) Zero (Succ rs) = Skip (splitSumRight5 xs Zero rs)
+splitSumRight5 (Succ xs) (Succ ls) rs = splitSumRight5 xs ls rs
+
+splitSumRight3 :: Sum (Eval (l ++ r)) -> Remainder l -> Sum r -> Sum r
+splitSumRight3 x           Zero      _     = x
+splitSumRight3 _           _         Empty = Empty
+splitSumRight3 (Pick _ xs) (Succ ls) rs    = splitSumRight4 xs ls rs
+splitSumRight3 (Skip   xs) (Succ ls) rs    = splitSumRight3 xs ls rs
+
+splitSumRight2 :: Remainder (Eval (l ++ r)) -> Sum l -> Sum r -> Sum r
+splitSumRight2 _ _ Empty = Empty
+splitSumRight2 (Succ xs) Empty (Skip rs) = Skip (splitSumRight2 xs Empty rs)
+splitSumRight2 (Succ xs) Empty (Pick _ rs) = Skip (splitSumRight6 xs Empty rs)
+splitSumRight2 (Succ xs) (Skip ls) rs = splitSumRight2 xs ls rs
+splitSumRight2 (Succ xs) (Pick _ ls) rs = splitSumRight4 xs ls rs
+
+splitSumRight6 :: Remainder (Eval (l ++ r)) -> Sum l -> Remainder r -> Sum r
+splitSumRight6 (Succ xs) Empty (Succ rs) = Skip (splitSumRight6 xs Empty rs)
+splitSumRight6 Zero      _     Zero      = Empty
+splitSumRight6 (Succ xs) (Pick _ ls) rs = splitSumRight5 xs ls rs
+splitSumRight6 (Succ xs) (Skip ls)   rs = splitSumRight6 xs ls rs
+
+splitSumLeft :: Sum (Eval (l ++ r)) -> Sum l -> Sum r -> Sum l
+splitSumLeft (Pick x xs) (Pick _ ls) rs = Pick x (splitSumLeftR xs ls rs)
+splitSumLeft (Pick x xs) (Skip   ls) rs = Pick x (splitSumLeftR2 xs ls rs)
+splitSumLeft (Skip   xs) (Pick _ ls) rs = Skip (splitSumLeftR4 xs ls rs)
+splitSumLeft (Skip   xs) (Skip   ls) rs = Skip (splitSumLeft xs ls rs)
+splitSumLeft _           Empty       _  = Empty
+
+splitSumLeftR4 :: Sum (Eval (l ++ r)) -> Remainder l -> Sum r -> Sum l
+splitSumLeftR4 _           Zero      _  = Empty
+splitSumLeftR4 (Pick x xs) (Succ ls) rs = Pick x (splitSumLeftR3 xs ls rs)
+splitSumLeftR4 (Skip   xs) (Succ ls) rs = Skip (splitSumLeftR4 xs ls rs)
+
+splitSumLeftR :: Remainder (Eval (l ++ r)) -> Remainder l -> Sum r -> Remainder l
+splitSumLeftR (Succ xs) (Succ ls) rs = Succ (splitSumLeftR xs ls rs)
+splitSumLeftR _          Zero     _ = Zero
+
+splitSumLeftR2 :: Remainder (Eval (l ++ r)) -> Sum l -> Sum r -> Remainder l
+splitSumLeftR2 (Succ xs) (Pick _ ls) rs = Succ (splitSumLeftR3 xs ls rs)
+splitSumLeftR2 _         Empty       _  = Zero
+splitSumLeftR2 (Succ xs) (Skip ls)   rs = Succ (splitSumLeftR2 xs ls rs)
+
+splitSumLeftR3 :: Remainder (Eval (l ++ r)) -> Remainder l -> Sum r -> Remainder l
+splitSumLeftR3 (Succ xs) (Succ ls) rs = Succ (splitSumLeftR3 xs ls rs)
+splitSumLeftR3 _         Zero     _ = Zero
+-- End of ugly boilerplate to deal with sums and remainders
+
 -----------------------------------------------------------------------
 -- MemRep, the king of this file
 class MemRep x where
@@ -300,101 +380,11 @@ instance (MemRep l, MemRep r) => MemRep (Either l r) where
                                         where
                                           rcs = splitRightWith cs (emptyChoices @ l) (emptyChoices @ r)
                                           rfs = splitRightWith fs (emptyFields @ l) (emptyFields @ r)
-  fromMemRep (Cons _             _)  _  = error "non existing index encountered"
+  fromMemRep (Cons _             _)  _  = error "constructor index out of bounds"
 
   emptyChoices = Cons (Skip Empty) (zipSum (emptyChoices @ l) (emptyChoices @ r))
   emptyFields = zipSum (emptyFields @ l) (emptyFields @ r)
 
-
-splitLeftWith :: Product (Eval (ZipWith' (<>) l r)) -> Product l -> Product r -> Product l
-splitLeftWith (Cons x xs) (Cons l ls) (Cons r rs) = Cons (splitSumLeft x l r) (splitLeftWith xs ls rs)
-splitLeftWith x           _         Nil  = x
-splitLeftWith (Cons _ _)  Nil       _    = Nil
-
-splitRightWith :: Product (Eval (ZipWith' (<>) l r)) -> Product l -> Product r -> Product r
-splitRightWith (Cons x xs) (Cons l ls) (Cons r rs) = Cons (splitSumRight x l r) (splitRightWith xs ls rs)
-splitRightWith x           Nil         _           = x
-splitRightWith _           _           Nil         = Nil
-
-splitSumRight :: Sum (Eval (l ++ r)) -> Sum l -> Sum r -> Sum r
-splitSumRight x Empty _ = x
-splitSumRight (Skip xs) (Skip ls) rs = splitSumRight xs ls rs
-splitSumRight (Pick _ xs) (Skip ls) rs = splitSumRight2 xs ls rs
-splitSumRight (Skip xs) (Pick _ ls) rs = splitSumRight3 xs ls rs
-splitSumRight (Pick _ xs) (Pick _ ls) rs = splitSumRight4 xs ls rs
-
-splitSumRight4 :: Remainder (Eval (l ++ r)) -> Remainder l -> Sum r -> Sum r
-splitSumRight4 Zero      Zero      _           = Empty
-splitSumRight4 (Succ xs) Zero      (Skip rs)   = Skip (splitSumRight4 xs Zero rs)
-splitSumRight4 (Succ xs) Zero      (Pick _ rs) = Skip (splitSumRight5 xs Zero rs)
-splitSumRight4 (Succ xs) (Succ ls) rs          = splitSumRight4 xs ls rs
-
-splitSumRight5 :: Remainder (Eval (l ++ r)) -> Remainder l -> Remainder r -> Sum r
-splitSumRight5 _ _ Zero = Empty
-splitSumRight5 (Succ xs) Zero (Succ rs) = Skip (splitSumRight5 xs Zero rs)
-splitSumRight5 (Succ xs) (Succ ls) rs = splitSumRight5 xs ls rs
-
-splitSumRight3 :: Sum (Eval (l ++ r)) -> Remainder l -> Sum r -> Sum r
-splitSumRight3 x           Zero      _     = x
-splitSumRight3 _           _         Empty = Empty
-splitSumRight3 (Pick _ xs) (Succ ls) rs    = splitSumRight4 xs ls rs
-splitSumRight3 (Skip   xs) (Succ ls) rs    = splitSumRight3 xs ls rs
-
-splitSumRight2 :: Remainder (Eval (l ++ r)) -> Sum l -> Sum r -> Sum r
-splitSumRight2 _ _ Empty = Empty
-splitSumRight2 (Succ xs) Empty (Skip rs) = Skip (splitSumRight2 xs Empty rs)
-splitSumRight2 (Succ xs) Empty (Pick _ rs) = Skip (splitSumRight6 xs Empty rs)
-splitSumRight2 (Succ xs) (Skip ls) rs = splitSumRight2 xs ls rs
-splitSumRight2 (Succ xs) (Pick _ ls) rs = splitSumRight4 xs ls rs
-
-splitSumRight6 :: Remainder (Eval (l ++ r)) -> Sum l -> Remainder r -> Sum r
-splitSumRight6 (Succ xs) Empty (Succ rs) = Skip (splitSumRight6 xs Empty rs)
-splitSumRight6 Zero      _     Zero      = Empty
-splitSumRight6 (Succ xs) (Pick _ ls) rs = splitSumRight5 xs ls rs
-splitSumRight6 (Succ xs) (Skip ls)   rs = splitSumRight6 xs ls rs
-
-splitSumLeft :: Sum (Eval (l ++ r)) -> Sum l -> Sum r -> Sum l
-splitSumLeft (Pick x xs) (Pick _ ls) rs = Pick x (splitSumLeftR xs ls rs)
-splitSumLeft (Pick x xs) (Skip   ls) rs = Pick x (splitSumLeftR2 xs ls rs)
-splitSumLeft (Skip   xs) (Pick _ ls) rs = Skip (splitSumLeftR4 xs ls rs)
-splitSumLeft (Skip   xs) (Skip   ls) rs = Skip (splitSumLeft xs ls rs)
-splitSumLeft _           Empty       _  = Empty
-
-splitSumLeftR4 :: Sum (Eval (l ++ r)) -> Remainder l -> Sum r -> Sum l
-splitSumLeftR4 _           Zero      _  = Empty
-splitSumLeftR4 (Pick x xs) (Succ ls) rs = Pick x (splitSumLeftR3 xs ls rs)
-splitSumLeftR4 (Skip   xs) (Succ ls) rs = Skip (splitSumLeftR4 xs ls rs)
-
-splitSumLeftR :: Remainder (Eval (l ++ r)) -> Remainder l -> Sum r -> Remainder l
-splitSumLeftR (Succ xs) (Succ ls) rs = Succ (splitSumLeftR xs ls rs)
-splitSumLeftR _          Zero     _ = Zero
-
-splitSumLeftR2 :: Remainder (Eval (l ++ r)) -> Sum l -> Sum r -> Remainder l
-splitSumLeftR2 (Succ xs) (Pick _ ls) rs = Succ (splitSumLeftR3 xs ls rs)
-splitSumLeftR2 _         Empty       _  = Zero
-splitSumLeftR2 (Succ xs) (Skip ls)   rs = Succ (splitSumLeftR2 xs ls rs)
-
-splitSumLeftR3 :: Remainder (Eval (l ++ r)) -> Remainder l -> Sum r -> Remainder l
-splitSumLeftR3 (Succ xs) (Succ ls) rs = Succ (splitSumLeftR3 xs ls rs)
-splitSumLeftR3 _         Zero     _ = Zero
-
--- splitLeft :: Product (Eval (l ++ r)) -> Product l -> Product r -> Product l
--- splitLeft (Cons x xs) (Cons _ ls) rs = Cons x (splitLeft xs ls rs)
--- splitLeft _           Nil         _  = Nil
-
--- splitRight :: Product (Eval (l ++ r)) -> Product l -> Product r -> Product r
--- splitRight (Cons _ xs) (Cons _ ls) rs = splitRight xs ls rs
--- splitRight x           Nil         _  = x
-
--- -- return leftmost Pick or Empty if no Pick is found
---   takeS :: Sum l -> Sum r -> Sum (Eval (l ++ r))
---   takeS (Pick l ls) r = Pick l (takeS' ls r)
---   takeS (Skip ls)   r = Skip (takeS ls r)
---   takeS Empty       r = r
--- zipSum :: Product l -> Product r -> Product (Eval (ZipWith' (<>) l r))
--- zipSum (Cons (x :: Sum a) xs) (Cons (y :: b) ys) = Cons (takeS x y) (zipSum xs ys)
--- zipSum Nil ys = ys
--- zipSum xs Nil = xs
 
 -- instance (MemRep a, MemRep b) => MemRep (Either (a, b) (b, a)) where
 --   type Choices (Either (a, b) (b, a)) = Sum '[Finite 2] ': Eval (ZipWith' (<>) (Choices (a, b)) (Choices (b, a)))
