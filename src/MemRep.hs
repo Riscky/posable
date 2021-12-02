@@ -60,9 +60,9 @@ import Generics.SOP.NS (expand_SOP, liftA_NS, liftA_SOP)
 
 -----------------------------------------------------------------------
 -- Heterogeneous lists with explicit types
-data Product xs where
+data Product :: [*] -> * where
   Nil :: Product '[]
-  Cons :: (x ~ Sum a) => x -> Product ys -> Product (x ': ys)
+  Cons :: (x ~ Sum a) => x -> Product xs -> Product (x ': xs)
 
 deriving instance (All Eq xs) => Eq (Product xs)
 
@@ -160,6 +160,15 @@ takeS'' Zero      r = r
 --
 -- Includes an ungodly amount of boilerplate
 --
+
+splitLeft :: Product (Eval (l ++ r)) -> Product l -> Product r -> Product l
+splitLeft (Cons x xs) (Cons _ ls) rs = Cons x (splitLeft xs ls rs)
+splitLeft _           Nil         _  = Nil
+
+splitRight :: Product (Eval (l ++ r)) -> Product l -> Product r -> Product r
+splitRight (Cons _ xs) (Cons _ ls) rs = splitRight xs ls rs
+splitRight x           Nil         _  = x
+
 splitLeftWith :: Product (Eval (ZipWith' (<>) l r)) -> Product l -> Product r -> Product l
 splitLeftWith (Cons x xs) (Cons l ls) (Cons r rs) = Cons (splitSumLeft x l r) (splitLeftWith xs ls rs)
 splitLeftWith x           _         Nil  = x
@@ -404,7 +413,6 @@ instance (MemRep l, MemRep r) => MemRep (Either l r) where
   -- emptyFields = Cons (Pick 0 Zero) Nil
 
 -- Instance for product types (tuples)
--- Recursively defined, because concatenation is a whole lot easier then zipWith (++)
 instance (MemRep x, MemRep y) => MemRep (x, y) where
   type Choices (x,y) = Eval (Choices x ++ Choices y)
   choices (x,y) = rvconcat (choices x) (choices y)
@@ -423,14 +431,6 @@ instance (MemRep x, MemRep y) => MemRep (x, y) where
                      xfs = splitLeft fs (emptyFields @ x) (emptyFields @ y)
                      ycs = splitRight cs (emptyChoices @ x) (emptyChoices @ y)
                      yfs = splitRight fs (emptyFields @ x) (emptyFields @ y)
-
-splitLeft :: Product (Eval (l ++ r)) -> Product l -> Product r -> Product l
-splitLeft (Cons x xs) (Cons _ ls) rs = Cons x (splitLeft xs ls rs)
-splitLeft _           Nil         _  = Nil
-
-splitRight :: Product (Eval (l ++ r)) -> Product l -> Product r -> Product r
-splitRight (Cons _ xs) (Cons _ ls) rs = splitRight xs ls rs
-splitRight x           Nil         _  = x
 
 --------------------------------------------------------------
 -- Generics
