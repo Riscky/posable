@@ -17,7 +17,7 @@
 {-# OPTIONS_GHC -Wno-missing-methods #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
-module MemRep (Product(..), Sum(..), Elt(..), Finite, Remainder(..)) where
+module Data.Type.MemRep (Product(..), Sum(..), Elt(..), Finite, Remainder(..)) where
 
 import Generics.SOP
     ( All,
@@ -288,7 +288,7 @@ class Elt x where
     ( GElt (SOP I (Code x))
     , Choices x ~ GChoices (SOP I (Code x))
     ) => Product (Choices x)
-  emptyChoices = gemptyChoices @ (SOP I (Code x))
+  emptyChoices = gemptyChoices @(SOP I (Code x))
 
   emptyFields :: Product (Fields x)
 
@@ -296,7 +296,7 @@ class Elt x where
     ( GElt (SOP I (Code x))
     , Fields x ~ GFields (SOP I (Code x))
     ) => Product (Fields x)
-  emptyFields  = gemptyFields @ (SOP I (Code x))
+  emptyFields  = gemptyFields @(SOP I (Code x))
 
 -----------------------------------------------------------------------
 -- Instances of Elt for machine types
@@ -372,27 +372,27 @@ instance Elt Int16 where
 -- Instance for Either, recursively defined
 instance (Elt l, Elt r) => Elt (Either l r) where
   type Choices (Either l r) = Sum '[Finite 2] ': Eval (ZipWith' (<>) (Choices l) (Choices r))
-  choices (Left lv)  = Cons (Pick 0 Zero) (zipSum (choices lv) (emptyChoices @ r))
-  choices (Right rv) = Cons (Pick 1 Zero) (zipSum (emptyChoices @ l) (choices rv))
+  choices (Left lv)  = Cons (Pick 0 Zero) (zipSum (choices lv) (emptyChoices @r))
+  choices (Right rv) = Cons (Pick 1 Zero) (zipSum (emptyChoices @l) (choices rv))
 
   type Fields (Either l r) = Eval (ZipWith' (<>) (Fields l) (Fields r))
-  fields (Left lv)  = zipSum (fields lv) (emptyFields @ r)
-  fields (Right rv) = zipSum (emptyFields @ l) (fields rv)
+  fields (Left lv)  = zipSum (fields lv) (emptyFields @r)
+  fields (Right rv) = zipSum (emptyFields @l) (fields rv)
 
-  widths = zipWith max (widths @ l) (widths @ r)
+  widths = zipWith max (widths @l) (widths @r)
 
   fromElt (Cons (Pick 0 Zero) cs) fs = Left (fromElt lcs lfs)
                                         where
-                                          lcs = splitLeftWith cs (emptyChoices @ l) (emptyChoices @ r)
-                                          lfs = splitLeftWith fs (emptyFields @ l)  (emptyFields @ r)
+                                          lcs = splitLeftWith cs (emptyChoices @l) (emptyChoices @r)
+                                          lfs = splitLeftWith fs (emptyFields @l)  (emptyFields @r)
   fromElt (Cons (Pick 1 Zero) cs) fs = Right (fromElt rcs rfs)
                                         where
-                                          rcs = splitRightWith cs (emptyChoices @ l) (emptyChoices @ r)
-                                          rfs = splitRightWith fs (emptyFields @ l) (emptyFields @ r)
+                                          rcs = splitRightWith cs (emptyChoices @l) (emptyChoices @r)
+                                          rfs = splitRightWith fs (emptyFields @l) (emptyFields @r)
   fromElt (Cons _             _)  _  = error "constructor index out of bounds"
 
-  emptyChoices = Cons (Skip Empty) (zipSum (emptyChoices @ l) (emptyChoices @ r))
-  emptyFields = zipSum (emptyFields @ l) (emptyFields @ r)
+  emptyChoices = Cons (Skip Empty) (zipSum (emptyChoices @l) (emptyChoices @r))
+  emptyFields = zipSum (emptyFields @l) (emptyFields @r)
 
 
 -- instance (Elt a, Elt b) => Elt (Either (a, b) (b, a)) where
@@ -420,17 +420,17 @@ instance (Elt x, Elt y) => Elt (x, y) where
   type Fields (x, y) = Eval (Fields x ++ Fields y)
   fields (x,y) = rvconcat (fields x) (fields y)
 
-  widths = widths @ x ++ widths @ y
+  widths = widths @x ++ widths @y
 
-  emptyChoices = rvconcat (emptyChoices @ x) (emptyChoices @ y)
-  emptyFields = rvconcat (emptyFields @ x) (emptyFields @ y)
+  emptyChoices = rvconcat (emptyChoices @x) (emptyChoices @y)
+  emptyFields = rvconcat (emptyFields @x) (emptyFields @y)
 
   fromElt cs fs = (fromElt xcs xfs, fromElt ycs yfs)
                    where
-                     xcs = splitLeft cs (emptyChoices @ x) (emptyChoices @ y)
-                     xfs = splitLeft fs (emptyFields @ x) (emptyFields @ y)
-                     ycs = splitRight cs (emptyChoices @ x) (emptyChoices @ y)
-                     yfs = splitRight fs (emptyFields @ x) (emptyFields @ y)
+                     xcs = splitLeft cs (emptyChoices @x) (emptyChoices @y)
+                     xfs = splitLeft fs (emptyFields @x) (emptyFields @y)
+                     ycs = splitRight cs (emptyChoices @x) (emptyChoices @y)
+                     yfs = splitRight fs (emptyFields @x) (emptyFields @y)
 
 --------------------------------------------------------------
 -- Generics
@@ -624,7 +624,7 @@ pureChoices :: (All Elt xs) => NP PC xs
 pureChoices = cpure_NP (Proxy :: Proxy Elt) emptyChoices'
 
 emptyChoices' :: forall x . (Elt x) => PC x
-emptyChoices' = PC $ emptyChoices @ x
+emptyChoices' = PC $ emptyChoices @x
 
 newtype PF a = PF (Product (Fields a))
 
@@ -639,7 +639,7 @@ pureFields :: (All Elt xs) => NP PF xs
 pureFields = cpure_NP (Proxy :: Proxy Elt) emptyFields'
 
 emptyFields' :: forall x . (Elt x) => PF x
-emptyFields' = PF $ emptyFields @ x
+emptyFields' = PF $ emptyFields @x
 
 -- unused random stuff
 xinner :: forall k (f :: k -> *) (xss :: [[k]]). POP f xss -> NP (NP f) xss

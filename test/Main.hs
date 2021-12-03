@@ -4,7 +4,7 @@ module Main where
 
 import Test.Tasty ( defaultMain, testGroup, TestTree )
 import Test.Tasty.HUnit ( testCase, (@?=) )
-import MemRep
+import Data.Type.MemRep
     ( Finite,
       Elt(choices, fields),
       Remainder(Zero, Succ),

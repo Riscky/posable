@@ -36,3 +36,8 @@ cabal build
 ```
 
 [Nix]: https://nixos.org/
+
+
+## Stack
+
+Tested with stack 2.7.3
