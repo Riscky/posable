@@ -11,5 +11,5 @@ List of things that should or could be done:
 - Clean up the generic helper functions
 - Fix up finites and indexing with constraints
 - PR@finite to let `finite` understand the class of `Integral`s instead of just `Integer`s
-- Convert Cabal stuff to Nix: https://mmhaskell.com/blog/2020/2/10/converting-cabal-to-nix
+- Remove Nix stuff and use Stack (hard to get things linked locally otherwise)
 - Convert back to original representation

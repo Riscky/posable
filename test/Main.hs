@@ -10,6 +10,7 @@ import Data.Type.MemRep
       Remainder(Zero, Succ),
       Sum(Pick, Skip),
       Product(Nil, Cons) )
+import Data.Type.Instances
 
 main :: IO ()
 main = defaultMain tests
