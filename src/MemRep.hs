@@ -17,7 +17,7 @@
 {-# OPTIONS_GHC -Wno-missing-methods #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
-module MemRep (Product(..), Sum(..), MemRep(..), Finite, Remainder(..)) where
+module MemRep (Product(..), Sum(..), Elt(..), Finite, Remainder(..)) where
 
 import Generics.SOP
     ( All,
@@ -244,8 +244,8 @@ splitSumLeftR3 _         Zero     _ = Zero
 -- End of ugly boilerplate to deal with sums and remainders
 
 -----------------------------------------------------------------------
--- MemRep, the king of this file
-class MemRep x where
+-- Elt, the king of this file
+class Elt x where
   type Choices x :: [*]
   type Choices x = GChoices (SOP I (Code x))
 
@@ -254,19 +254,19 @@ class MemRep x where
   default choices ::
     ( Generic x
     , Choices x ~ GChoices (SOP I (Code x))
-    , GMemRep (SOP I (Code x))
+    , GElt (SOP I (Code x))
     ) => x -> Product (Choices x)
   choices x = gchoices $ from x
 
-  fromMemRep :: Product (Choices x) -> Product (Fields x) -> x
+  fromElt :: Product (Choices x) -> Product (Fields x) -> x
 
-  default fromMemRep ::
+  default fromElt ::
     ( Generic x
-    , (GMemRep (SOP I (Code x)))
+    , (GElt (SOP I (Code x)))
     , Choices x ~ GChoices (SOP I (Code x))
     , Fields x ~ GFields (SOP I (Code x))
     ) => Product (Choices x) -> Product (Fields x) -> x
-  fromMemRep cs fs = to $ gfromMemRep cs fs
+  fromElt cs fs = to $ gfromElt cs fs
 
   type Fields x :: [*]
   type Fields x = GFields (SOP I (Code x))
@@ -276,7 +276,7 @@ class MemRep x where
   default fields ::
     ( Generic x
     , Fields x ~ GFields (SOP I (Code x))
-    , GMemRep (SOP I (Code x))
+    , GElt (SOP I (Code x))
     ) => x -> Product (Fields x)
   fields x = gfields $ from x
 
@@ -285,7 +285,7 @@ class MemRep x where
   emptyChoices :: Product (Choices x)
 
   default emptyChoices ::
-    ( GMemRep (SOP I (Code x))
+    ( GElt (SOP I (Code x))
     , Choices x ~ GChoices (SOP I (Code x))
     ) => Product (Choices x)
   emptyChoices = gemptyChoices @ (SOP I (Code x))
@@ -293,17 +293,17 @@ class MemRep x where
   emptyFields :: Product (Fields x)
 
   default emptyFields ::
-    ( GMemRep (SOP I (Code x))
+    ( GElt (SOP I (Code x))
     , Fields x ~ GFields (SOP I (Code x))
     ) => Product (Fields x)
   emptyFields  = gemptyFields @ (SOP I (Code x))
 
 -----------------------------------------------------------------------
--- Instances of MemRep for machine types
+-- Instances of Elt for machine types
 
 -- Sadly, this definition due to overlapping instances:
 
--- instance Base x => MemRep x where
+-- instance Base x => Elt x where
 --   type Choices x = '[]
 --   choices x = Nil
 
@@ -313,56 +313,56 @@ class MemRep x where
 -- Instead, we have to do with a seperate definition per base type, which leads
 -- to a horrible amount of boilerplate.
 -- This is fixable with some Template Haskell, but let's not go there now.
-instance MemRep Int where
+instance Elt Int where
   type Choices Int = '[]
   choices _ = Nil
 
   type Fields Int = '[Sum '[Int]]
   fields x = Cons (Pick x Zero) Nil
 
-  fromMemRep Nil (Cons (Pick x Zero) Nil) = x
+  fromElt Nil (Cons (Pick x Zero) Nil) = x
 
   widths = [32]
 
   emptyChoices = Nil
   emptyFields = Cons (Skip Empty) Nil
 
-instance MemRep Float where
+instance Elt Float where
   type Choices Float = '[]
   choices _ = Nil
 
   type Fields Float = '[Sum '[Float]]
   fields x = Cons (Pick x Zero) Nil
 
-  fromMemRep Nil (Cons (Pick x Zero) Nil) = x
+  fromElt Nil (Cons (Pick x Zero) Nil) = x
 
   widths = [32]
 
   emptyChoices = Nil
   emptyFields = Cons (Skip Empty) Nil
 
-instance MemRep Int8 where
+instance Elt Int8 where
   type Choices Int8 = '[]
   choices _ = Nil
 
   type Fields Int8 = '[Sum '[Int8]]
   fields x = Cons (Pick x Zero) Nil
 
-  fromMemRep Nil (Cons (Pick x Zero) Nil) = x
+  fromElt Nil (Cons (Pick x Zero) Nil) = x
 
   widths = [8]
 
   emptyChoices = Nil
   emptyFields = Cons (Skip Empty) Nil
 
-instance MemRep Int16 where
+instance Elt Int16 where
   type Choices Int16 = '[]
   choices _ = Nil
 
   type Fields Int16 = '[Sum '[Int16]]
   fields x = Cons (Pick x Zero) Nil
 
-  fromMemRep Nil (Cons (Pick x Zero) Nil) = x
+  fromElt Nil (Cons (Pick x Zero) Nil) = x
 
   widths = [16]
 
@@ -370,7 +370,7 @@ instance MemRep Int16 where
   emptyFields = Cons (Skip Empty) Nil
 
 -- Instance for Either, recursively defined
-instance (MemRep l, MemRep r) => MemRep (Either l r) where
+instance (Elt l, Elt r) => Elt (Either l r) where
   type Choices (Either l r) = Sum '[Finite 2] ': Eval (ZipWith' (<>) (Choices l) (Choices r))
   choices (Left lv)  = Cons (Pick 0 Zero) (zipSum (choices lv) (emptyChoices @ r))
   choices (Right rv) = Cons (Pick 1 Zero) (zipSum (emptyChoices @ l) (choices rv))
@@ -381,21 +381,21 @@ instance (MemRep l, MemRep r) => MemRep (Either l r) where
 
   widths = zipWith max (widths @ l) (widths @ r)
 
-  fromMemRep (Cons (Pick 0 Zero) cs) fs = Left (fromMemRep lcs lfs)
+  fromElt (Cons (Pick 0 Zero) cs) fs = Left (fromElt lcs lfs)
                                         where
                                           lcs = splitLeftWith cs (emptyChoices @ l) (emptyChoices @ r)
                                           lfs = splitLeftWith fs (emptyFields @ l)  (emptyFields @ r)
-  fromMemRep (Cons (Pick 1 Zero) cs) fs = Right (fromMemRep rcs rfs)
+  fromElt (Cons (Pick 1 Zero) cs) fs = Right (fromElt rcs rfs)
                                         where
                                           rcs = splitRightWith cs (emptyChoices @ l) (emptyChoices @ r)
                                           rfs = splitRightWith fs (emptyFields @ l) (emptyFields @ r)
-  fromMemRep (Cons _             _)  _  = error "constructor index out of bounds"
+  fromElt (Cons _             _)  _  = error "constructor index out of bounds"
 
   emptyChoices = Cons (Skip Empty) (zipSum (emptyChoices @ l) (emptyChoices @ r))
   emptyFields = zipSum (emptyFields @ l) (emptyFields @ r)
 
 
--- instance (MemRep a, MemRep b) => MemRep (Either (a, b) (b, a)) where
+-- instance (Elt a, Elt b) => Elt (Either (a, b) (b, a)) where
 --   type Choices (Either (a, b) (b, a)) = Sum '[Finite 2] ': Eval (ZipWith' (<>) (Choices (a, b)) (Choices (b, a)))
 --   choices (Left x)  = Cons (Pick 0 Zero) (zipSum (choices x) (emptyChoices @ (b, a)))
 --   choices (Right x) = Cons (Pick 1 Zero) (zipSum (emptyChoices @ (a,b)) (choices x))
@@ -404,8 +404,8 @@ instance (MemRep l, MemRep r) => MemRep (Either l r) where
 --   fields (Left  (a,b)) = fields (a,b)
 --   fields (Right (b,a)) = fields (a,b)
 
---   fromMemRep (Cons (Pick 0 Zero) cs) fs = Left (fromMemRep cs fs)
---   fromMemRep (Cons (Pick 1 Zero) cs) fs | (a,b) <- fromMemRep cs fs = Right (b,a)
+--   fromElt (Cons (Pick 0 Zero) cs) fs = Left (fromElt cs fs)
+--   fromElt (Cons (Pick 1 Zero) cs) fs | (a,b) <- fromElt cs fs = Right (b,a)
 
   -- widths = [16]
 
@@ -413,7 +413,7 @@ instance (MemRep l, MemRep r) => MemRep (Either l r) where
   -- emptyFields = Cons (Pick 0 Zero) Nil
 
 -- Instance for product types (tuples)
-instance (MemRep x, MemRep y) => MemRep (x, y) where
+instance (Elt x, Elt y) => Elt (x, y) where
   type Choices (x,y) = Eval (Choices x ++ Choices y)
   choices (x,y) = rvconcat (choices x) (choices y)
 
@@ -425,7 +425,7 @@ instance (MemRep x, MemRep y) => MemRep (x, y) where
   emptyChoices = rvconcat (emptyChoices @ x) (emptyChoices @ y)
   emptyFields = rvconcat (emptyFields @ x) (emptyFields @ y)
 
-  fromMemRep cs fs = (fromMemRep xcs xfs, fromMemRep ycs yfs)
+  fromElt cs fs = (fromElt xcs xfs, fromElt ycs yfs)
                    where
                      xcs = splitLeft cs (emptyChoices @ x) (emptyChoices @ y)
                      xfs = splitLeft fs (emptyFields @ x) (emptyFields @ y)
@@ -436,15 +436,15 @@ instance (MemRep x, MemRep y) => MemRep (x, y) where
 -- Generics
 
 -----------------------------------------------------------------------
--- GMemRep, the serf of this file
-class GMemRep x where
+-- GElt, the serf of this file
+class GElt x where
   type GChoices x :: [*]
   gchoices :: x -> Product (GChoices x)
 
   type GFields x :: [*]
   gfields :: x -> Product (GFields x)
 
-  gfromMemRep :: Product (GChoices x) -> Product (GFields x) -> x
+  gfromElt :: Product (GChoices x) -> Product (GFields x) -> x
 
   gemptyChoices :: Product (GChoices x)
   gemptyFields :: Product (GFields x)
@@ -468,7 +468,7 @@ type family Length (xs :: [[*]]) :: Nat where
 
 -----------------------------------------------------------------------
 -- Whole bit of tryout code, to be removed
-sopMap :: (All2 MemRep xs) => SOP I xs -> SOP Product (Eval (Map (Map AppChoices) xs))
+sopMap :: (All2 Elt xs) => SOP I xs -> SOP Product (Eval (Map (Map AppChoices) xs))
 sopMap = undefined
 
 -- :t hexpand (K ()) (SOP (S (Z (I 1.0 :* SOP.Nil))))
@@ -486,16 +486,16 @@ purePOP' :: (All SOP.SListI yss) => SOP I yss -> POP (K ()) yss
 purePOP' x = expand_SOP (K ()) $ sopHap x
 
 -- -- sopHap' :: (All SOP.SListI xss) => SOP I xss -> SOP Product (Eval (Map (Map AppChoices) xss))
--- sopHap' :: (All SListI xss, All2 MemRep xss) => SOP I xss -> SOP (Product <*> Choices <*> Pure) xss
+-- sopHap' :: (All SListI xss, All2 Elt xss) => SOP I xss -> SOP (Product <*> Choices <*> Pure) xss
 -- sopHap' = mapSOP apChoices
 
 -- Expected type: NP I x -> NP (Eval (AppProduct (Map AppChoices))) x
 -- Actual type:   NP I x -> NP Product (Eval     (Map AppChoices    x))
 
--- something :: (All Top xss) => (All2 MemRep xss) => SOP I xss -> SOP I (Product (AppChoices x))
+-- something :: (All Top xss) => (All2 Elt xss) => SOP I xss -> SOP I (Product (AppChoices x))
 -- something = mapNS npMap'
 
--- npMap' :: (All MemRep xs) => NP I xs -> NP (Eval (AppProduct (Map AppChoices))) xs
+-- npMap' :: (All Elt xs) => NP I xs -> NP (Eval (AppProduct (Map AppChoices))) xs
 -- npMap' SOP.Nil   = SOP.Nil
 -- npMap' (x :* xs) = choices' (unI x) :* npMap' xs
 
@@ -506,11 +506,11 @@ purePOP' x = expand_SOP (K ()) $ sopHap x
 mapNS :: (All Top xss) => forall f g . (forall x . NP f x -> NP g x) -> SOP f xss -> SOP g xss
 mapNS f = SOP . liftA_NS f . unSOP
 
-npMap :: (All MemRep xs) => NP I xs -> NP Product (Eval (Map AppChoices xs))
+npMap :: (All Elt xs) => NP I xs -> NP Product (Eval (Map AppChoices xs))
 npMap SOP.Nil   = SOP.Nil
 npMap (x :* xs) = choices (unI x) :* npMap xs
 
-apChoices :: (MemRep a) => I a -> Product (Choices a)
+apChoices :: (Elt a) => I a -> Product (Choices a)
 apChoices = choices . unI
 
 mapSOP :: All SListI xss => (forall (a :: k). f a -> g a) -> SOP f xss -> SOP g xss
@@ -520,12 +520,12 @@ npFold :: Product ys -> NP Product xs -> Product (Eval (Foldl (++) ys xs))
 npFold acc SOP.Nil   = acc
 npFold acc (x :* xs) = npFold (rvconcat acc x) xs
 
-npMapF :: (All MemRep xs) => NP I xs -> NP Product (Eval (Map AppFields xs))
+npMapF :: (All Elt xs) => NP I xs -> NP Product (Eval (Map AppFields xs))
 npMapF SOP.Nil   = SOP.Nil
 npMapF (x :* xs) = fields (unI x) :* npMapF xs
 
 -- generic instance for sums, incompete implementation
--- instance (All MemRep a, All MemRep b, All2 MemRep cs) => GMemRep (SOP I (a ': b ': cs)) where
+-- instance (All Elt a, All Elt b, All2 Elt cs) => GElt (SOP I (a ': b ': cs)) where
 --   type GChoices (SOP I (a ': b ': cs)) =  Sum '[Finite (Length (a ': b ': cs))] ': Eval (Foldl (ZipWith' (<>)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppChoices) (a ': b ': cs))))))
 --   gchoices (SOP xs) = Cons (Pick (finite $ toInteger $ index_NS xs) Zero) undefined
 
@@ -537,9 +537,9 @@ npMapF (x :* xs) = fields (unI x) :* npMapF xs
 
 -- generic instance for binary sums
 instance
-    ( All MemRep l
-    , All MemRep r
-    ) => GMemRep (SOP I '[ l, r]) where
+    ( All Elt l
+    , All Elt r
+    ) => GElt (SOP I '[ l, r]) where
   type GChoices (SOP I '[ l, r]) =  Sum '[Finite 2] ': Eval (Foldl (ZipWith' (<>)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppChoices) '[ l, r])))))
   gchoices (SOP (Z ls))     = Cons (Pick 0 Zero) (zipSum (npFold Nil (npMap ls)) (npFold Nil (convertPureChoices (pureChoices :: NP PC r))))
   gchoices (SOP (S (Z rs))) = Cons (Pick 1 Zero) (zipSum (npFold Nil (convertPureChoices (pureChoices :: NP PC l))) (npFold Nil (npMap rs)))
@@ -556,10 +556,10 @@ instance
 
 -- generic instance for ternary sums
 instance
-    ( All MemRep x
-    , All MemRep y
-    , All MemRep z
-    ) => GMemRep (SOP I '[ x, y, z]) where
+    ( All Elt x
+    , All Elt y
+    , All Elt z
+    ) => GElt (SOP I '[ x, y, z]) where
   type GChoices (SOP I '[ x, y, z]) =  Sum '[Finite 3] ': Eval (Foldl (ZipWith' (<>)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppChoices) '[ x, y, z])))))
   gchoices (SOP (Z xs))         = Cons (Pick 0 Zero) (zipSum (zipSum (npFold Nil (npMap xs)) (npFold Nil (convertPureChoices (pureChoices :: NP PC y)))) (npFold Nil (convertPureChoices (pureChoices :: NP PC z))))
   gchoices (SOP (S (Z ys)))     = Cons (Pick 1 Zero) (zipSum (zipSum (npFold Nil (convertPureChoices (pureChoices :: NP PC x))) (npFold Nil (npMap ys))) (npFold Nil (convertPureChoices (pureChoices :: NP PC z))))
@@ -594,7 +594,7 @@ type instance Eval (Foldl f y '[]) = y
 type instance Eval (Foldl f y (x ': xs)) = Eval (Foldl f (Eval (f y x)) xs)
 
 -- generic instance for unary sums (tuples)
-instance (All MemRep as) => GMemRep (SOP I '[as]) where
+instance (All Elt as) => GElt (SOP I '[as]) where
   type GChoices (SOP I '[as]) = Eval (Foldl (++) '[] (Eval (Map AppChoices as)))
   gchoices (SOP (Z xs)) = npFold Nil (npMap xs)
   gchoices (SOP (S _)) = error "this is not even possible"
@@ -620,10 +620,10 @@ convertPureChoices :: NP PC xs -> NP Product (Eval (Map AppChoices xs))
 convertPureChoices SOP.Nil   = SOP.Nil
 convertPureChoices (x :* xs) = unPC x :* convertPureChoices xs
 
-pureChoices :: (All MemRep xs) => NP PC xs
-pureChoices = cpure_NP (Proxy :: Proxy MemRep) emptyChoices'
+pureChoices :: (All Elt xs) => NP PC xs
+pureChoices = cpure_NP (Proxy :: Proxy Elt) emptyChoices'
 
-emptyChoices' :: forall x . (MemRep x) => PC x
+emptyChoices' :: forall x . (Elt x) => PC x
 emptyChoices' = PC $ emptyChoices @ x
 
 newtype PF a = PF (Product (Fields a))
@@ -635,46 +635,46 @@ convertPureFields :: NP PF xs -> NP Product (Eval (Map AppFields xs))
 convertPureFields SOP.Nil   = SOP.Nil
 convertPureFields (x :* xs) = unPF x :* convertPureFields xs
 
-pureFields :: (All MemRep xs) => NP PF xs
-pureFields = cpure_NP (Proxy :: Proxy MemRep) emptyFields'
+pureFields :: (All Elt xs) => NP PF xs
+pureFields = cpure_NP (Proxy :: Proxy Elt) emptyFields'
 
-emptyFields' :: forall x . (MemRep x) => PF x
+emptyFields' :: forall x . (Elt x) => PF x
 emptyFields' = PF $ emptyFields @ x
 
 -- unused random stuff
 xinner :: forall k (f :: k -> *) (xss :: [[k]]). POP f xss -> NP (NP f) xss
 xinner = unPOP
 
-try :: (All2 MemRep xss) => POP PC xss
-try = cpure_POP (Proxy :: Proxy MemRep) emptyChoices'
+try :: (All2 Elt xss) => POP PC xss
+try = cpure_POP (Proxy :: Proxy Elt) emptyChoices'
 
 -----------------------------------------------------------------------
 -- Instances for some made up datatypes
 data Try a b = Som a | Oth b
-             deriving (GHC.Generic, Generic, MemRep)
+             deriving (GHC.Generic, Generic, Elt)
 
 data Tuple a b = T a b
-               deriving (GHC.Generic, Generic, MemRep)
+               deriving (GHC.Generic, Generic, Elt)
 
 data Tuple5 a b c d e = T5 a b c d e
-                      deriving (GHC.Generic, Generic, MemRep)
+                      deriving (GHC.Generic, Generic, Elt)
 
 data Unit = Unit
-          deriving (GHC.Generic, Generic, MemRep)
+          deriving (GHC.Generic, Generic, Elt)
 
 data MultiSum x y = First x y
                   | Second y x
-                  deriving (GHC.Generic, Generic, MemRep)
+                  deriving (GHC.Generic, Generic, Elt)
 
 data Direction n e s = North n
                      | East e
                      | South s
-                     deriving (GHC.Generic, Generic, MemRep)
+                     deriving (GHC.Generic, Generic, Elt)
 
 -----------------------------------------------------------------------
 -- Instances for common Haskell datatypes
-deriving instance MemRep Bool
-deriving instance MemRep x => MemRep (Maybe x)
--- deriving instance (MemRep l, MemRep r) => MemRep (Either l r)
-deriving instance MemRep ()
--- deriving instance (MemRep a, MemRep b) => MemRep (a,b)
+deriving instance Elt Bool
+deriving instance Elt x => Elt (Maybe x)
+-- deriving instance (Elt l, Elt r) => Elt (Either l r)
+deriving instance Elt ()
+-- deriving instance (Elt a, Elt b) => Elt (a,b)
