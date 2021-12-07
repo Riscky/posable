@@ -52,6 +52,7 @@ import Generics.SOP.NP (cpure_POP, cpure_NP)
 import GHC.Base (Nat)
 import GHC.TypeLits (type (+))
 import Generics.SOP.NS (expand_SOP, liftA_NS, liftA_SOP)
+import qualified Fcf.Class.Monoid as FcfM
 
 -----------------------------------------------------------------------
 -- Heterogeneous lists with explicit types
@@ -155,16 +156,6 @@ takeS'' Zero      r = r
 --
 -- Includes an ungodly amount of boilerplate
 --
-
--- splitLeft :: Product (Eval (x ++ y)) -> Product x -> Product x
--- splitLeft (Cons _ xs) (Cons _ ls) rs          = splitLeft xs ls rs
--- splitLeft (Cons x xs) Nil         (Cons _ zs) = Cons x (splitLeft xs Nil zs)
--- splitLeft _           Nil         Nil         = Nil
-
--- splitLeft :: Product (Eval (x ++ y)) -> Product x -> Product x
--- splitLeft (Cons _ xs) (Cons _ ls) rs          = splitLeft xs ls rs
--- splitLeft (Cons x xs) Nil         (Cons _ zs) = Cons x (splitLeft xs Nil zs)
--- splitLeft _           Nil         Nil         = Nil
 
 split :: Product (Eval (l ++ r)) -> Product l -> Product r -> (Product l, Product r)
 split xy x y = (splitLeft xy x y, splitRight xy x)
@@ -563,6 +554,24 @@ instance (All Elt as) => GElt (SOP I '[as]) where
 
   gemptyChoices = npFold Nil (convertPureChoices (pureChoices :: NP PC as))
   gemptyFields = npFold Nil (convertPureFields (pureFields :: NP PF as))
+
+  gfromElt cs fs = SOP (Z $ generate cs fs (pureChoices :: NP PC as) (pureFields :: NP PF as))
+
+-- convertC :: Product (Eval (Foldl (++) (Choices x) (Eval (Map AppChoices xs)))) -> Product (Choices x FcfM.<> Eval (Foldl (++) '[] (Eval (Map AppChoices xs))))
+-- convertC x = undefined
+
+-- convertF :: Product (Eval (Foldl (++) (Fields x) (Eval (Map AppFields xs)))) -> Product (Fields x FcfM.<> Eval (Foldl (++) '[] (Eval (Map AppFields xs))))
+-- convertF x = undefined
+
+generate :: (All Elt as) => Product (Eval (Foldl (++) '[] (Eval (Map AppChoices as)))) -> Product (Eval (Foldl (++) '[] (Eval (Map AppFields as)))) -> NP PC as -> NP PF as -> NP I as
+generate _  _ SOP.Nil   SOP.Nil    = SOP.Nil
+generate cs fs (x :* xs) (y :* ys) = SOP.I (fromElt xc xf) :* generate xcs xfs xs ys
+                                    where
+                                      (xc, xcs) = split (undefined cs) (unPC x) (npFold Nil (convertPureChoices xs))
+                                      (xf, xfs) = split (undefined fs) (unPF y) (npFold Nil (convertPureFields ys))
+
+-- split :: Product (Eval (l ++ r)) -> Product l -> Product r -> (Product l, Product r)
+-- split xy x y = (splitLeft xy x y, splitRight xy x)
 
 
 -- foldPop :: NP PC xss -> Product (Eval (Foldl (++) '[] (Eval (Map AppChoices yss))))
