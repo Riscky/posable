@@ -6,7 +6,7 @@ import Test.Tasty ( defaultMain, testGroup, TestTree )
 import Test.Tasty.HUnit ( testCase, (@?=) )
 import Data.Type.MemRep
     ( Finite,
-      Elt(choices, fields),
+      MemRep(choices, fields),
       Remainder(Zero, Succ),
       Sum(Pick, Skip),
       Product(Nil, Cons) )
