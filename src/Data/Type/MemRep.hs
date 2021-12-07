@@ -46,7 +46,7 @@ import Fcf ( Eval, Exp, type (++), Map)
 
 import qualified Generics.SOP as SOP
 
-import Data.Kind ()
+import Data.Kind (Type)
 import Generics.SOP.NP (cpure_POP, cpure_NP)
 
 import GHC.Base (Nat)
@@ -156,13 +156,26 @@ takeS'' Zero      r = r
 -- Includes an ungodly amount of boilerplate
 --
 
+-- splitLeft :: Product (Eval (x ++ y)) -> Product x -> Product x
+-- splitLeft (Cons _ xs) (Cons _ ls) rs          = splitLeft xs ls rs
+-- splitLeft (Cons x xs) Nil         (Cons _ zs) = Cons x (splitLeft xs Nil zs)
+-- splitLeft _           Nil         Nil         = Nil
+
+-- splitLeft :: Product (Eval (x ++ y)) -> Product x -> Product x
+-- splitLeft (Cons _ xs) (Cons _ ls) rs          = splitLeft xs ls rs
+-- splitLeft (Cons x xs) Nil         (Cons _ zs) = Cons x (splitLeft xs Nil zs)
+-- splitLeft _           Nil         Nil         = Nil
+
+split :: Product (Eval (l ++ r)) -> Product l -> Product r -> (Product l, Product r)
+split xy x y = (splitLeft xy x y, splitRight xy x)
+
 splitLeft :: Product (Eval (l ++ r)) -> Product l -> Product r -> Product l
 splitLeft (Cons x xs) (Cons _ ls) rs = Cons x (splitLeft xs ls rs)
 splitLeft _           Nil         _  = Nil
 
-splitRight :: Product (Eval (l ++ r)) -> Product l -> Product r -> Product r
-splitRight (Cons _ xs) (Cons _ ls) rs = splitRight xs ls rs
-splitRight x           Nil         _  = x
+splitRight :: Product (Eval (l ++ r)) -> Product l -> Product r
+splitRight (Cons _ xs) (Cons _ ls) = splitRight xs ls
+splitRight x           Nil         = x
 
 splitLeftWith :: Product (Eval (ZipWith' (<>) l r)) -> Product l -> Product r -> Product l
 splitLeftWith (Cons x xs) (Cons l ls) (Cons r rs) = Cons (splitSumLeft x l r) (splitLeftWith xs ls rs)
@@ -352,10 +365,30 @@ instance (Elt x, Elt y) => Elt (x, y) where
 
   fromElt cs fs = (fromElt xcs xfs, fromElt ycs yfs)
                    where
-                     xcs = splitLeft cs (emptyChoices @x) (emptyChoices @y)
-                     xfs = splitLeft fs (emptyFields @x) (emptyFields @y)
-                     ycs = splitRight cs (emptyChoices @x) (emptyChoices @y)
-                     yfs = splitRight fs (emptyFields @x) (emptyFields @y)
+                     (xcs, ycs) = split cs (emptyChoices @x) (emptyChoices @y)
+                     (xfs, yfs) = split fs (emptyFields @x) (emptyFields @y)
+
+
+-- Instance for 3-tuples
+instance (Elt x, Elt y, Elt z) => Elt (x, y, z) where
+  type Choices (x, y, z) = Eval (Eval (Choices x ++ Choices y) ++ Choices z)
+  choices (x, y, z) = rvconcat (rvconcat (choices x) (choices y)) (choices z)
+
+  type Fields (x, y, z) = Eval (Eval (Fields x ++ Fields y) ++ Fields z)
+  fields (x, y, z) = rvconcat (rvconcat (fields x) (fields y)) (fields z)
+
+  widths = widths @x ++ widths @y ++ widths @z
+
+  emptyChoices = rvconcat (rvconcat (emptyChoices @x) (emptyChoices @y)) (emptyChoices @z)
+  emptyFields = rvconcat (rvconcat (emptyFields @x) (emptyFields @y)) (emptyFields @z)
+
+  fromElt cs fs = (fromElt xcs xfs, fromElt ycs yfs, fromElt zcs zfs)
+                   where
+                    (xycs, zcs) = split cs (rvconcat (emptyChoices @x) (emptyChoices @y)) (emptyChoices @z)
+                    (xyfs, zfs) = split fs (rvconcat (emptyFields @x) (emptyFields @y)) (emptyFields @z)
+                    (xcs, ycs) = split xycs (emptyChoices @x) (emptyChoices @y)
+                    (xfs, yfs) = split xyfs (emptyFields @x) (emptyFields @y)
+
 
 --------------------------------------------------------------
 -- Generics
