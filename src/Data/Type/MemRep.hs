@@ -14,7 +14,7 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
-module Data.Type.MemRep (Product(..), Sum(..), MemRep(..), Finite, Remainder(..)) where
+module Data.Type.MemRep (Product(..), Sum(..), MemRep(..), Finite, Remainder(..), ZipWith', Merge, zipSum, splitLeftWith, splitRightWith, rvconcat, split) where
 
 import Generics.SOP
     ( All,
@@ -122,6 +122,8 @@ type instance Eval (ZipWith' f (a ': as) (b ': bs)) =
 -- type instance Eval (ZipWithNew _f _as '[]) = _as
 -- type instance Eval (ZipWithNew f (a ': as) (b ': bs)) =
 --   Eval (f a b) ': Eval (ZipWithNew f as bs)
+
+type Merge = (<>)
 
 data (<>) :: * -> * -> Exp *
 
@@ -296,90 +298,6 @@ class MemRep x where
     , Fields x ~ GFields (SOP I (Code x))
     ) => Product (Fields x)
   emptyFields  = gemptyFields @(SOP I (Code x))
-
-
--- Instance for Either, recursively defined
-instance (MemRep l, MemRep r) => MemRep (Either l r) where
-  type Choices (Either l r) = Sum '[Finite 2] ': Eval (ZipWith' (<>) (Choices l) (Choices r))
-  choices (Left lv)  = Cons (Pick 0 Zero) (zipSum (choices lv) (emptyChoices @r))
-  choices (Right rv) = Cons (Pick 1 Zero) (zipSum (emptyChoices @l) (choices rv))
-
-  type Fields (Either l r) = Eval (ZipWith' (<>) (Fields l) (Fields r))
-  fields (Left lv)  = zipSum (fields lv) (emptyFields @r)
-  fields (Right rv) = zipSum (emptyFields @l) (fields rv)
-
-  widths = zipWith max (widths @l) (widths @r)
-
-  fromMemRep (Cons (Pick 0 Zero) cs) fs = Left (fromMemRep lcs lfs)
-                                        where
-                                          lcs = splitLeftWith cs (emptyChoices @l) (emptyChoices @r)
-                                          lfs = splitLeftWith fs (emptyFields @l)  (emptyFields @r)
-  fromMemRep (Cons (Pick 1 Zero) cs) fs = Right (fromMemRep rcs rfs)
-                                        where
-                                          rcs = splitRightWith cs (emptyChoices @l) (emptyChoices @r)
-                                          rfs = splitRightWith fs (emptyFields @l) (emptyFields @r)
-  fromMemRep (Cons _             _)  _  = error "constructor index out of bounds"
-
-  emptyChoices = Cons (Skip Empty) (zipSum (emptyChoices @l) (emptyChoices @r))
-  emptyFields = zipSum (emptyFields @l) (emptyFields @r)
-
-
--- instance (MemRep a, MemRep b) => MemRep (Either (a, b) (b, a)) where
---   type Choices (Either (a, b) (b, a)) = Sum '[Finite 2] ': Eval (ZipWith' (<>) (Choices (a, b)) (Choices (b, a)))
---   choices (Left x)  = Cons (Pick 0 Zero) (zipSum (choices x) (emptyChoices @ (b, a)))
---   choices (Right x) = Cons (Pick 1 Zero) (zipSum (emptyChoices @ (a,b)) (choices x))
-
---   type Fields (Either (a, b) (b, a)) = Fields (a, b)
---   fields (Left  (a,b)) = fields (a,b)
---   fields (Right (b,a)) = fields (a,b)
-
---   fromMemRep (Cons (Pick 0 Zero) cs) fs = Left (fromMemRep cs fs)
---   fromMemRep (Cons (Pick 1 Zero) cs) fs | (a,b) <- fromMemRep cs fs = Right (b,a)
-
-  -- widths = [16]
-
-  -- emptyChoices = Nil
-  -- emptyFields = Cons (Pick 0 Zero) Nil
-
--- Instance for product types (tuples)
-instance (MemRep x, MemRep y) => MemRep (x, y) where
-  type Choices (x,y) = Eval (Choices x ++ Choices y)
-  choices (x,y) = rvconcat (choices x) (choices y)
-
-  type Fields (x, y) = Eval (Fields x ++ Fields y)
-  fields (x,y) = rvconcat (fields x) (fields y)
-
-  widths = widths @x ++ widths @y
-
-  emptyChoices = rvconcat (emptyChoices @x) (emptyChoices @y)
-  emptyFields = rvconcat (emptyFields @x) (emptyFields @y)
-
-  fromMemRep cs fs = (fromMemRep xcs xfs, fromMemRep ycs yfs)
-                   where
-                     (xcs, ycs) = split cs (emptyChoices @x) (emptyChoices @y)
-                     (xfs, yfs) = split fs (emptyFields @x) (emptyFields @y)
-
-
--- Instance for 3-tuples
-instance (MemRep x, MemRep y, MemRep z) => MemRep (x, y, z) where
-  type Choices (x, y, z) = Eval (Eval (Choices x ++ Choices y) ++ Choices z)
-  choices (x, y, z) = rvconcat (rvconcat (choices x) (choices y)) (choices z)
-
-  type Fields (x, y, z) = Eval (Eval (Fields x ++ Fields y) ++ Fields z)
-  fields (x, y, z) = rvconcat (rvconcat (fields x) (fields y)) (fields z)
-
-  widths = widths @x ++ widths @y ++ widths @z
-
-  emptyChoices = rvconcat (rvconcat (emptyChoices @x) (emptyChoices @y)) (emptyChoices @z)
-  emptyFields = rvconcat (rvconcat (emptyFields @x) (emptyFields @y)) (emptyFields @z)
-
-  fromMemRep cs fs = (fromMemRep xcs xfs, fromMemRep ycs yfs, fromMemRep zcs zfs)
-                   where
-                    (xycs, zcs) = split cs (rvconcat (emptyChoices @x) (emptyChoices @y)) (emptyChoices @z)
-                    (xyfs, zfs) = split fs (rvconcat (emptyFields @x) (emptyFields @y)) (emptyFields @z)
-                    (xcs, ycs) = split xycs (emptyChoices @x) (emptyChoices @y)
-                    (xfs, yfs) = split xyfs (emptyFields @x) (emptyFields @y)
-
 
 --------------------------------------------------------------
 -- Generics
