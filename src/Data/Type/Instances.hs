@@ -26,14 +26,16 @@ import Fcf (Eval, type (++))
 import Data.Type.MemRep
     ( MemRep(..),
       ZipWith',
-      Remainder(Zero),
       Sum(..),
       Product(Nil, Cons),
+      SumType(..),
+      ProductType(..),
       rvconcat,
-      zipSum,
-      split,
-      splitLeftWith,
-      splitRightWith
+      rvconcatT,
+      zipSum
+    , zipSumT
+    , zipSumRight
+    , zipSumLeft
     )
 
 -----------------------------------------------------------------------
@@ -89,83 +91,83 @@ instance MemRep Int where
   choices _ = Nil
 
   type Fields Int = '[ '[Int]]
-  fields x = Cons (Pick x Zero) Nil
+  fields x = Cons (Pick x) Nil
 
-  fromMemRep Nil (Cons (Pick x Zero) Nil) = x
+  fromMemRep Nil (Cons (Pick x) Nil) = x
 
   widths = [32]
 
-  emptyChoices = Nil
-  emptyFields = Cons (Skip Empty) Nil
+  emptyChoices = PTNil
+  emptyFields = PTCons (STSucc 0 STZero) PTNil
 
 instance MemRep Float where
   type Choices Float = '[]
   choices _ = Nil
 
   type Fields Float = '[ '[Float]]
-  fields x = Cons (Pick x Zero) Nil
+  fields x = Cons (Pick x) Nil
 
-  fromMemRep Nil (Cons (Pick x Zero) Nil) = x
+  fromMemRep Nil (Cons (Pick x) Nil) = x
 
   widths = [32]
 
-  emptyChoices = Nil
-  emptyFields = Cons (Skip Empty) Nil
+  emptyChoices = PTNil
+  emptyFields = PTCons (STSucc 0 STZero) PTNil
 
 instance MemRep Int8 where
   type Choices Int8 = '[]
   choices _ = Nil
 
   type Fields Int8 = '[ '[Int8]]
-  fields x = Cons (Pick x Zero) Nil
+  fields x = Cons (Pick x) Nil
 
-  fromMemRep Nil (Cons (Pick x Zero) Nil) = x
+  fromMemRep Nil (Cons (Pick x) Nil) = x
 
   widths = [8]
 
-  emptyChoices = Nil
-  emptyFields = Cons (Skip Empty) Nil
+  emptyChoices = PTNil
+  emptyFields = PTCons (STSucc 0 STZero) PTNil
 
 instance MemRep Int16 where
   type Choices Int16 = '[]
   choices _ = Nil
 
   type Fields Int16 = '[ '[Int16]]
-  fields x = Cons (Pick x Zero) Nil
+  fields x = Cons (Pick x) Nil
 
-  fromMemRep Nil (Cons (Pick x Zero) Nil) = x
+  fromMemRep Nil (Cons (Pick x) Nil) = x
 
   widths = [16]
 
-  emptyChoices = Nil
-  emptyFields = Cons (Skip Empty) Nil
+  emptyChoices = PTNil
+  emptyFields = PTCons (STSucc 0 STZero) PTNil
 
 
 
 -- Instance for Either, recursively defined
 instance (MemRep l, MemRep r) => MemRep (Either l r) where
   type Choices (Either l r) = '[Finite 2] ': Eval (ZipWith' (++) (Choices l) (Choices r))
-  choices (Left lv)  = Cons (Pick 0 Zero) (zipSum (choices lv) (emptyChoices @r))
-  choices (Right rv) = Cons (Pick 1 Zero) (zipSum (emptyChoices @l) (choices rv))
+  choices (Left lv)  = Cons (Pick 0) (zipSumLeft (choices lv) (emptyChoices @r))
+  choices (Right rv) = Cons (Pick 1) (zipSumRight (emptyChoices @l) (choices rv))
 
   type Fields (Either l r) = Eval (ZipWith' (++) (Fields l) (Fields r))
-  fields (Left lv)  = zipSum (fields lv) (emptyFields @r)
-  fields (Right rv) = zipSum (emptyFields @l) (fields rv)
+  fields (Left lv)  = zipSumLeft (fields lv) (emptyFields @r)
+  fields (Right rv) = zipSumRight (emptyFields @l) (fields rv)
 
   widths = zipWith max (widths @l) (widths @r)
 
-  fromMemRep (Cons (Pick 0 Zero) cs) fs = Left (fromMemRep lcs lfs)
-                                        where
-                                          lcs = splitLeftWith cs (emptyChoices @l) (emptyChoices @r)
-                                          lfs = splitLeftWith fs (emptyFields @l)  (emptyFields @r)
-  fromMemRep (Cons (Pick 1 Zero) cs) fs = Right (fromMemRep rcs rfs)
-                                        where
-                                          rcs = splitRightWith cs (emptyChoices @l) (emptyChoices @r)
-                                          rfs = splitRightWith fs (emptyFields @l) (emptyFields @r)
+  fromMemRep (Cons (Pick 0) cs) fs = undefined --  Left (fromMemRep lcs lfs)
+                                        -- where
+                                        --   lcs = splitLeftWith cs (emptyChoices @l) (emptyChoices @r)
+                                        --   lfs = splitLeftWith fs (emptyFields @l)  (emptyFields @r)
+  fromMemRep (Cons (Pick 1) cs) fs = undefined -- Right (fromMemRep rcs rfs)
+                                        -- where
+                                        --   rcs = splitRightWith cs (emptyChoices @l) (emptyChoices @r)
+                                        --   rfs = splitRightWith fs (emptyFields @l) (emptyFields @r)
   fromMemRep (Cons _             _)  _  = error "constructor index out of bounds"
 
-  emptyChoices = Cons (Skip Empty) (zipSum (emptyChoices @l) (emptyChoices @r))
-  emptyFields = zipSum (emptyFields @l) (emptyFields @r)
+  emptyChoices = PTCons (STSucc 0 STZero) (zipSumT (emptyChoices @l) (emptyChoices @r))
+  emptyFields = zipSumT (emptyFields @l) (emptyFields @r)
 
 
 -- instance (MemRep a, MemRep b) => MemRep (Either (a, b) (b, a)) where
@@ -195,13 +197,13 @@ instance (MemRep x, MemRep y) => MemRep (x, y) where
 
   widths = widths @x ++ widths @y
 
-  emptyChoices = rvconcat (emptyChoices @x) (emptyChoices @y)
-  emptyFields = rvconcat (emptyFields @x) (emptyFields @y)
+  emptyChoices = rvconcatT (emptyChoices @x) (emptyChoices @y)
+  emptyFields = rvconcatT (emptyFields @x) (emptyFields @y)
 
-  fromMemRep cs fs = (fromMemRep xcs xfs, fromMemRep ycs yfs)
-                   where
-                     (xcs, ycs) = split cs (emptyChoices @x) (emptyChoices @y)
-                     (xfs, yfs) = split fs (emptyFields @x) (emptyFields @y)
+  fromMemRep cs fs = undefined -- (fromMemRep xcs xfs, fromMemRep ycs yfs)
+                  --  where
+                  --    (xcs, ycs) = split cs (emptyChoices @x) (emptyChoices @y)
+                  --    (xfs, yfs) = split fs (emptyFields @x) (emptyFields @y)
 
 
 -- Instance for 3-tuples
@@ -214,13 +216,13 @@ instance (MemRep x, MemRep y, MemRep z) => MemRep (x, y, z) where
 
   widths = widths @x ++ widths @y ++ widths @z
 
-  emptyChoices = rvconcat (rvconcat (emptyChoices @x) (emptyChoices @y)) (emptyChoices @z)
-  emptyFields = rvconcat (rvconcat (emptyFields @x) (emptyFields @y)) (emptyFields @z)
+  emptyChoices = rvconcatT (rvconcatT (emptyChoices @x) (emptyChoices @y)) (emptyChoices @z)
+  emptyFields = rvconcatT (rvconcatT (emptyFields @x) (emptyFields @y)) (emptyFields @z)
 
-  fromMemRep cs fs = (fromMemRep xcs xfs, fromMemRep ycs yfs, fromMemRep zcs zfs)
-                   where
-                    (xycs, zcs) = split cs (rvconcat (emptyChoices @x) (emptyChoices @y)) (emptyChoices @z)
-                    (xyfs, zfs) = split fs (rvconcat (emptyFields @x) (emptyFields @y)) (emptyFields @z)
-                    (xcs, ycs) = split xycs (emptyChoices @x) (emptyChoices @y)
-                    (xfs, yfs) = split xyfs (emptyFields @x) (emptyFields @y)
+  fromMemRep cs fs = undefined -- (fromMemRep xcs xfs, fromMemRep ycs yfs, fromMemRep zcs zfs)
+                  --  where
+                  --   (xycs, zcs) = split cs (rvconcat (emptyChoices @x) (emptyChoices @y)) (emptyChoices @z)
+                  --   (xyfs, zfs) = split fs (rvconcat (emptyFields @x) (emptyFields @y)) (emptyFields @z)
+                  --   (xcs, ycs) = split xycs (emptyChoices @x) (emptyChoices @y)
+                  --   (xfs, yfs) = split xyfs (emptyFields @x) (emptyFields @y)
 

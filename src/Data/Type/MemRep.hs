@@ -14,7 +14,7 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
-module Data.Type.MemRep (Product(..), Sum(..), MemRep(..), Finite, Remainder(..), ZipWith', zipSum, splitLeftWith, splitRightWith, rvconcat, split) where
+module Data.Type.MemRep where
 
 import Generics.SOP
     ( All,
@@ -56,7 +56,11 @@ import qualified Fcf.Class.Monoid as FcfM
 
 -----------------------------------------------------------------------
 -- Heterogeneous lists with explicit types
-data Product :: [[*]] -> * where
+data ProductType :: [[Type]] -> Type where
+  PTNil :: ProductType '[]
+  PTCons :: SumType x -> ProductType xs -> ProductType (x ': xs)
+
+data Product :: [[Type]] -> Type where
   Nil :: Product '[]
   Cons :: Sum x -> Product xs -> Product (x ': xs)
 
@@ -72,6 +76,10 @@ rvconcat :: Product x -> Product y -> Product (Eval (x ++ y))
 rvconcat Nil         ys = ys
 rvconcat (Cons x xs) ys = Cons x (rvconcat xs ys)
 
+rvconcatT :: ProductType x -> ProductType y -> ProductType (Eval (x ++ y))
+rvconcatT PTNil         ys = ys
+rvconcatT (PTCons x xs) ys = PTCons x (rvconcatT xs ys)
+
 -- wrap Product in an Exp to use it as an argument to higher order type functions
 data AppProduct :: x -> Exp y
 
@@ -79,24 +87,21 @@ type instance Eval (AppProduct x) = Product x
 
 -----------------------------------------------------------------------
 -- Typelevel sums with a empty value
-data Sum :: [*] -> * where
-  Pick :: x -> Remainder xs -> Sum (x ': xs)
+data SumType :: [Type] -> Type where
+  STSucc :: x -> SumType xs -> SumType (x ': xs)
+  STZero :: SumType '[]
+
+data Sum :: [Type] -> Type where
+  Pick :: x -> Sum (x ': xs)
   Skip :: Sum xs -> Sum (x ': xs)
-  Empty :: Sum '[]
+  Undef :: Sum '[]
 
 deriving instance (All Eq xs) => Eq (Sum xs)
 
--- the remainder makes it possible to known the length of the sum at runtime
-data Remainder :: [*] -> * where
-  Succ :: Remainder xs -> Remainder (x ': xs)
-  Zero  :: Remainder '[]
-
-deriving instance Eq (Remainder xs)
-
 instance (All Show x) => Show (Sum x) where
-  show (Pick x _) = show x
-  show (Skip x)   = show x
-  show Empty      = "Ø"
+  show (Pick x) = show x
+  show (Skip x) = show x
+  show Undef    = "undefined"
 
 -----------------------------------------------------------------------
 -- Functions on Products and Sums
@@ -130,113 +135,46 @@ zipSum (Cons (x :: Sum a) xs) (Cons (y :: b) ys) = Cons (takeS x y) (zipSum xs y
 zipSum Nil ys = ys
 zipSum xs Nil = xs
 
+zipSumRight :: ProductType l -> Product r -> Product (Eval (ZipWith' (++) l r))
+zipSumRight (PTCons x xs) (Cons y ys) = Cons (takeRight x y) (zipSumRight xs ys)
+zipSumRight PTNil ys = ys
+zipSumRight xs Nil = makeUndefProduct xs
+
+makeUndefProduct :: ProductType x -> Product x
+makeUndefProduct (PTCons y ys) = Cons (makeEmpty y) (makeUndefProduct ys)
+makeUndefProduct PTNil         = Nil
+
+zipSumLeft :: Product l -> ProductType r -> Product (Eval (ZipWith' (++) l r))
+zipSumLeft (Cons x xs) (PTCons y ys) = Cons (takeLeft x y) (zipSumLeft xs ys)
+zipSumLeft Nil         (PTCons y ys) = Cons (makeEmpty y) (zipSumLeft Nil ys)
+zipSumLeft xs          PTNil         = xs
+
+makeEmpty :: SumType xs -> Sum xs
+makeEmpty (STSucc x xs) = Skip (makeEmpty xs)
+makeEmpty STZero        = Undef
+
+zipSumT :: ProductType l -> ProductType r -> ProductType (Eval (ZipWith' (++) l r))
+zipSumT (PTCons x xs) (PTCons y ys) = PTCons (takeST x y) (zipSumT xs ys)
+zipSumT PTNil ys = ys
+zipSumT xs PTNil = xs
+
 -- return leftmost Pick or Empty if no Pick is found
 takeS :: Sum l -> Sum r -> Sum (Eval (l ++ r))
-takeS (Pick l ls) r = Pick l (takeS' ls r)
+takeS (Pick l) r = undefined -- Pick l (takeS' ls r)
 takeS (Skip ls)   r = Skip (takeS ls r)
-takeS Empty       r = r
+takeS Undef       r = r
 
-takeS' :: Remainder l -> Sum r -> Remainder (Eval (l ++ r))
-takeS' (Succ ls) r           = Succ (takeS' ls r)
-takeS' Zero      Empty       = Zero
-takeS' Zero      (Skip rs)   = Succ (takeS' Zero rs)
-takeS' Zero      (Pick _ rs) = Succ (takeS'' Zero rs)
+takeST :: SumType l -> SumType r -> SumType (Eval (l ++ r))
+takeST (STSucc l ls) rs = STSucc l (takeST ls rs)
+takeST STZero        rs = rs
 
-takeS'' :: Remainder l -> Remainder r -> Remainder (Eval (l ++ r))
-takeS'' (Succ ls) r = Succ (takeS'' ls r)
-takeS'' Zero      r = r
+takeLeft :: Sum l -> SumType r -> Sum (Eval (l ++ r))
+takeLeft (Pick l)  rs = Pick l
+takeLeft (Skip ls) rs = Skip (takeLeft ls rs)
+takeLeft Undef     rs = makeEmpty rs
 
-
---------------------------------------------------------------
--- Functions to deal with splitting values back into existence
---
--- Includes an ungodly amount of boilerplate
---
-
-split :: Product (Eval (l ++ r)) -> Product l -> Product r -> (Product l, Product r)
-split xy x y = (splitLeft xy x y, splitRight xy x)
-
-splitLeft :: Product (Eval (l ++ r)) -> Product l -> Product r -> Product l
-splitLeft (Cons x xs) (Cons _ ls) rs = Cons x (splitLeft xs ls rs)
-splitLeft _           Nil         _  = Nil
-
-splitRight :: Product (Eval (l ++ r)) -> Product l -> Product r
-splitRight (Cons _ xs) (Cons _ ls) = splitRight xs ls
-splitRight x           Nil         = x
-
-splitLeftWith :: Product (Eval (ZipWith' (++) l r)) -> Product l -> Product r -> Product l
-splitLeftWith (Cons x xs) (Cons l ls) (Cons r rs) = Cons (splitSumLeft x l r) (splitLeftWith xs ls rs)
-splitLeftWith x           _         Nil  = x
-splitLeftWith (Cons _ _)  Nil       _    = Nil
-
-splitRightWith :: Product (Eval (ZipWith' (++) l r)) -> Product l -> Product r -> Product r
-splitRightWith (Cons x xs) (Cons l ls) (Cons r rs) = Cons (splitSumRight x l r) (splitRightWith xs ls rs)
-splitRightWith x           Nil         _           = x
-splitRightWith _           _           Nil         = Nil
-
--- Start of ugly boilerplate to deal with sums and remainders
-splitSumRight :: Sum (Eval (l ++ r)) -> Sum l -> Sum r -> Sum r
-splitSumRight x Empty _ = x
-splitSumRight (Skip xs) (Skip ls) rs = splitSumRight xs ls rs
-splitSumRight (Pick _ xs) (Skip ls) rs = splitSumRight2 xs ls rs
-splitSumRight (Skip xs) (Pick _ ls) rs = splitSumRight3 xs ls rs
-splitSumRight (Pick _ xs) (Pick _ ls) rs = splitSumRight4 xs ls rs
-
-splitSumRight4 :: Remainder (Eval (l ++ r)) -> Remainder l -> Sum r -> Sum r
-splitSumRight4 Zero      Zero      _           = Empty
-splitSumRight4 (Succ xs) Zero      (Skip rs)   = Skip (splitSumRight4 xs Zero rs)
-splitSumRight4 (Succ xs) Zero      (Pick _ rs) = Skip (splitSumRight5 xs Zero rs)
-splitSumRight4 (Succ xs) (Succ ls) rs          = splitSumRight4 xs ls rs
-
-splitSumRight5 :: Remainder (Eval (l ++ r)) -> Remainder l -> Remainder r -> Sum r
-splitSumRight5 _ _ Zero = Empty
-splitSumRight5 (Succ xs) Zero (Succ rs) = Skip (splitSumRight5 xs Zero rs)
-splitSumRight5 (Succ xs) (Succ ls) rs = splitSumRight5 xs ls rs
-
-splitSumRight3 :: Sum (Eval (l ++ r)) -> Remainder l -> Sum r -> Sum r
-splitSumRight3 x           Zero      _     = x
-splitSumRight3 _           _         Empty = Empty
-splitSumRight3 (Pick _ xs) (Succ ls) rs    = splitSumRight4 xs ls rs
-splitSumRight3 (Skip   xs) (Succ ls) rs    = splitSumRight3 xs ls rs
-
-splitSumRight2 :: Remainder (Eval (l ++ r)) -> Sum l -> Sum r -> Sum r
-splitSumRight2 _ _ Empty = Empty
-splitSumRight2 (Succ xs) Empty (Skip rs) = Skip (splitSumRight2 xs Empty rs)
-splitSumRight2 (Succ xs) Empty (Pick _ rs) = Skip (splitSumRight6 xs Empty rs)
-splitSumRight2 (Succ xs) (Skip ls) rs = splitSumRight2 xs ls rs
-splitSumRight2 (Succ xs) (Pick _ ls) rs = splitSumRight4 xs ls rs
-
-splitSumRight6 :: Remainder (Eval (l ++ r)) -> Sum l -> Remainder r -> Sum r
-splitSumRight6 (Succ xs) Empty (Succ rs) = Skip (splitSumRight6 xs Empty rs)
-splitSumRight6 Zero      _     Zero      = Empty
-splitSumRight6 (Succ xs) (Pick _ ls) rs = splitSumRight5 xs ls rs
-splitSumRight6 (Succ xs) (Skip ls)   rs = splitSumRight6 xs ls rs
-
-splitSumLeft :: Sum (Eval (l ++ r)) -> Sum l -> Sum r -> Sum l
-splitSumLeft (Pick x xs) (Pick _ ls) rs = Pick x (splitSumLeftR xs ls rs)
-splitSumLeft (Pick x xs) (Skip   ls) rs = Pick x (splitSumLeftR2 xs ls rs)
-splitSumLeft (Skip   xs) (Pick _ ls) rs = Skip (splitSumLeftR4 xs ls rs)
-splitSumLeft (Skip   xs) (Skip   ls) rs = Skip (splitSumLeft xs ls rs)
-splitSumLeft _           Empty       _  = Empty
-
-splitSumLeftR4 :: Sum (Eval (l ++ r)) -> Remainder l -> Sum r -> Sum l
-splitSumLeftR4 _           Zero      _  = Empty
-splitSumLeftR4 (Pick x xs) (Succ ls) rs = Pick x (splitSumLeftR3 xs ls rs)
-splitSumLeftR4 (Skip   xs) (Succ ls) rs = Skip (splitSumLeftR4 xs ls rs)
-
-splitSumLeftR :: Remainder (Eval (l ++ r)) -> Remainder l -> Sum r -> Remainder l
-splitSumLeftR (Succ xs) (Succ ls) rs = Succ (splitSumLeftR xs ls rs)
-splitSumLeftR _          Zero     _ = Zero
-
-splitSumLeftR2 :: Remainder (Eval (l ++ r)) -> Sum l -> Sum r -> Remainder l
-splitSumLeftR2 (Succ xs) (Pick _ ls) rs = Succ (splitSumLeftR3 xs ls rs)
-splitSumLeftR2 _         Empty       _  = Zero
-splitSumLeftR2 (Succ xs) (Skip ls)   rs = Succ (splitSumLeftR2 xs ls rs)
-
-splitSumLeftR3 :: Remainder (Eval (l ++ r)) -> Remainder l -> Sum r -> Remainder l
-splitSumLeftR3 (Succ xs) (Succ ls) rs = Succ (splitSumLeftR3 xs ls rs)
-splitSumLeftR3 _         Zero     _ = Zero
--- End of ugly boilerplate to deal with sums and remainders
+takeRight :: SumType l -> Sum r -> Sum (Eval (l ++ r))
+takeRight = undefined
 
 -----------------------------------------------------------------------
 -- MemRep, the king of this file
@@ -277,20 +215,20 @@ class MemRep x where
 
   widths :: [Int]
 
-  emptyChoices :: Product (Choices x)
+  emptyChoices :: ProductType (Choices x)
 
   default emptyChoices ::
     ( GMemRep (SOP I (Code x))
     , Choices x ~ GChoices (SOP I (Code x))
-    ) => Product (Choices x)
+    ) => ProductType (Choices x)
   emptyChoices = gemptyChoices @(SOP I (Code x))
 
-  emptyFields :: Product (Fields x)
+  emptyFields :: ProductType (Fields x)
 
   default emptyFields ::
     ( GMemRep (SOP I (Code x))
     , Fields x ~ GFields (SOP I (Code x))
-    ) => Product (Fields x)
+    ) => ProductType (Fields x)
   emptyFields  = gemptyFields @(SOP I (Code x))
 
 --------------------------------------------------------------
@@ -307,8 +245,8 @@ class GMemRep x where
 
   gfromMemRep :: Product (GChoices x) -> Product (GFields x) -> x
 
-  gemptyChoices :: Product (GChoices x)
-  gemptyFields :: Product (GFields x)
+  gemptyChoices :: ProductType (GChoices x)
+  gemptyFields :: ProductType (GFields x)
 
 -----------------------------------------------------------------------
 -- Length of typelevel lists
@@ -381,6 +319,10 @@ npFold :: Product ys -> NP Product xs -> Product (Eval (Foldl (++) ys xs))
 npFold acc SOP.Nil   = acc
 npFold acc (x :* xs) = npFold (rvconcat acc x) xs
 
+npFoldT :: ProductType ys -> NP ProductType xs -> ProductType (Eval (Foldl (++) ys xs))
+npFoldT acc SOP.Nil   = acc
+npFoldT acc (x :* xs) = npFoldT (rvconcatT acc x) xs
+
 npMapF :: (All MemRep xs) => NP I xs -> NP Product (Eval (Map AppFields xs))
 npMapF SOP.Nil   = SOP.Nil
 npMapF (x :* xs) = fields (unI x) :* npMapF xs
@@ -402,17 +344,17 @@ instance
     , All MemRep r
     ) => GMemRep (SOP I '[ l, r]) where
   type GChoices (SOP I '[ l, r]) =  '[Finite 2] ': Eval (Foldl (ZipWith' (++)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppChoices) '[ l, r])))))
-  gchoices (SOP (Z ls))     = Cons (Pick 0 Zero) (zipSum (npFold Nil (npMap ls)) (npFold Nil (convertPureChoices (pureChoices :: NP PC r))))
-  gchoices (SOP (S (Z rs))) = Cons (Pick 1 Zero) (zipSum (npFold Nil (convertPureChoices (pureChoices :: NP PC l))) (npFold Nil (npMap rs)))
+  gchoices (SOP (Z ls))     = Cons (Pick 0) (zipSumLeft (npFold Nil (npMap ls)) (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC r))))
+  gchoices (SOP (S (Z rs))) = Cons (Pick 1) (zipSumRight (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC l))) (npFold Nil (npMap rs)))
   gchoices (SOP (S (S _))) = error "this is not even possible"
 
   type GFields (SOP I '[ l, r]) = Eval (Foldl (ZipWith' (++)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) '[ l, r])))))
-  gfields (SOP (Z ls))     = zipSum (npFold Nil (npMapF ls)) (npFold Nil (convertPureFields (pureFields :: NP PF r)))
-  gfields (SOP (S (Z rs))) = zipSum (npFold Nil (convertPureFields (pureFields :: NP PF l))) (npFold Nil (npMapF rs))
+  gfields (SOP (Z ls))     = zipSumLeft (npFold Nil (npMapF ls)) (npFoldT PTNil (convertPureFields (pureFields :: NP PF r)))
+  gfields (SOP (S (Z rs))) = zipSumRight (npFoldT PTNil (convertPureFields (pureFields :: NP PF l))) (npFold Nil (npMapF rs))
   gfields (SOP (S (S _))) = error "this is not even possible"
 
-  gemptyChoices = Cons (Pick 0 Zero) (zipSum (npFold Nil (convertPureChoices (pureChoices :: NP PC l))) (npFold Nil (convertPureChoices (pureChoices :: NP PC r))))
-  gemptyFields = zipSum (npFold Nil (convertPureFields (pureFields :: NP PF l))) (npFold Nil (convertPureFields (pureFields :: NP PF r)))
+  gemptyChoices = PTCons (STSucc 0 STZero) (zipSumT (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC l))) (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC r))))
+  gemptyFields = zipSumT (npFoldT PTNil (convertPureFields (pureFields :: NP PF l))) (npFoldT PTNil (convertPureFields (pureFields :: NP PF r)))
 
 
 -- generic instance for ternary sums
@@ -422,20 +364,20 @@ instance
     , All MemRep z
     ) => GMemRep (SOP I '[ x, y, z]) where
   type GChoices (SOP I '[ x, y, z]) = '[Finite 3] ': Eval (Foldl (ZipWith' (++)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppChoices) '[ x, y, z])))))
-  gchoices (SOP (Z xs))         = Cons (Pick 0 Zero) (zipSum (zipSum (npFold Nil (npMap xs)) (npFold Nil (convertPureChoices (pureChoices :: NP PC y)))) (npFold Nil (convertPureChoices (pureChoices :: NP PC z))))
-  gchoices (SOP (S (Z ys)))     = Cons (Pick 1 Zero) (zipSum (zipSum (npFold Nil (convertPureChoices (pureChoices :: NP PC x))) (npFold Nil (npMap ys))) (npFold Nil (convertPureChoices (pureChoices :: NP PC z))))
-  gchoices (SOP (S (S (Z zs)))) = Cons (Pick 2 Zero) (zipSum (zipSum (npFold Nil (convertPureChoices (pureChoices :: NP PC x))) (npFold Nil (convertPureChoices (pureChoices :: NP PC y)))) (npFold Nil (npMap zs)))
+  gchoices (SOP (Z xs))         = Cons (Pick 0) (zipSumLeft (zipSumLeft (npFold Nil (npMap xs)) (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC y)))) (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC z))))
+  gchoices (SOP (S (Z ys)))     = Cons (Pick 1) (zipSumLeft (zipSumRight (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC x))) (npFold Nil (npMap ys))) (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC z))))
+  gchoices (SOP (S (S (Z zs)))) = Cons (Pick 2) (zipSumRight (zipSumT (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC x))) (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC y)))) (npFold Nil (npMap zs)))
   -- TODO proof that this is not possible
   gchoices (SOP (S (S (S _)))) = error "this is not even possible"
 
   type GFields (SOP I '[ x, y, z]) = Eval (Foldl (ZipWith' (++)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) '[ x, y, z])))))
-  gfields (SOP (Z xs))         = zipSum (zipSum (npFold Nil (npMapF xs)) (npFold Nil (convertPureFields (pureFields :: NP PF y)))) (npFold Nil (convertPureFields (pureFields :: NP PF z)))
-  gfields (SOP (S (Z ys)))     = zipSum (zipSum (npFold Nil (convertPureFields (pureFields :: NP PF x))) (npFold Nil (npMapF ys))) (npFold Nil (convertPureFields (pureFields :: NP PF z)))
-  gfields (SOP (S (S (Z zs)))) = zipSum (zipSum (npFold Nil (convertPureFields (pureFields :: NP PF x))) (npFold Nil (convertPureFields (pureFields :: NP PF y)))) (npFold Nil (npMapF zs))
+  gfields (SOP (Z xs))         = zipSumLeft (zipSumLeft (npFold Nil (npMapF xs)) (npFoldT PTNil (convertPureFields (pureFields :: NP PF y)))) (npFoldT PTNil (convertPureFields (pureFields :: NP PF z)))
+  gfields (SOP (S (Z ys)))     = zipSumLeft (zipSumRight (npFoldT PTNil (convertPureFields (pureFields :: NP PF x))) (npFold Nil (npMapF ys))) (npFoldT PTNil (convertPureFields (pureFields :: NP PF z)))
+  gfields (SOP (S (S (Z zs)))) = zipSumRight (zipSumT (npFoldT PTNil (convertPureFields (pureFields :: NP PF x))) (npFoldT PTNil (convertPureFields (pureFields :: NP PF y)))) (npFold Nil (npMapF zs))
   gfields (SOP (S (S (S _))))  = error "this is not even possible"
 
-  -- gemptyChoices = Cons (Skip Empty) (zipSum (npFold Nil (convertPureChoices (pureChoices :: NP PC l))) (npFold Nil (convertPureChoices (pureChoices :: NP PC r))))
-  -- gemptyFields = zipSum (npFold Nil (convertPureFields (pureFields :: NP PF l))) (npFold Nil (convertPureFields (pureFields :: NP PF r)))
+  -- gemptyChoices = Cons (Skip Empty) (zipSumT (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC l))) (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC r))))
+  -- gemptyFields = zipSumT (npFoldT PTNil (convertPureFields (pureFields :: NP PF l))) (npFoldT PTNil (convertPureFields (pureFields :: NP PF r)))
 
 
 data AppChoices :: x -> Exp y
@@ -464,10 +406,10 @@ instance (All MemRep as) => GMemRep (SOP I '[as]) where
   gfields (SOP (Z xs)) = npFold Nil (npMapF xs)
   gfields (SOP (S _)) = error "this is not even possible"
 
-  gemptyChoices = npFold Nil (convertPureChoices (pureChoices :: NP PC as))
-  gemptyFields = npFold Nil (convertPureFields (pureFields :: NP PF as))
+  gemptyChoices = npFoldT PTNil (convertPureChoices (pureChoices :: NP PC as))
+  gemptyFields = npFoldT PTNil (convertPureFields (pureFields :: NP PF as))
 
-  gfromMemRep cs fs = SOP (Z $ generate cs fs (pureChoices :: NP PC as) (pureFields :: NP PF as))
+  gfromMemRep cs fs = undefined -- SOP (Z $ generate cs fs (pureChoices :: NP PC as) (pureFields :: NP PF as))
 
 -- convertC :: Product (Eval (Foldl (++) (Choices x) (Eval (Map AppChoices xs)))) -> Product (Choices x FcfM.<> Eval (Foldl (++) '[] (Eval (Map AppChoices xs))))
 -- convertC x = undefined
@@ -475,12 +417,12 @@ instance (All MemRep as) => GMemRep (SOP I '[as]) where
 -- convertF :: Product (Eval (Foldl (++) (Fields x) (Eval (Map AppFields xs)))) -> Product (Fields x FcfM.<> Eval (Foldl (++) '[] (Eval (Map AppFields xs))))
 -- convertF x = undefined
 
-generate :: (All MemRep as) => Product (Eval (Foldl (++) '[] (Eval (Map AppChoices as)))) -> Product (Eval (Foldl (++) '[] (Eval (Map AppFields as)))) -> NP PC as -> NP PF as -> NP I as
-generate _  _ SOP.Nil   SOP.Nil    = SOP.Nil
-generate cs fs (x :* xs) (y :* ys) = SOP.I (fromMemRep xc xf) :* generate xcs xfs xs ys
-                                    where
-                                      (xc, xcs) = split (undefined cs) (unPC x) (npFold Nil (convertPureChoices xs))
-                                      (xf, xfs) = split (undefined fs) (unPF y) (npFold Nil (convertPureFields ys))
+-- generate :: (All MemRep as) => Product (Eval (Foldl (++) '[] (Eval (Map AppChoices as)))) -> Product (Eval (Foldl (++) '[] (Eval (Map AppFields as)))) -> NP PC as -> NP PF as -> NP I as
+-- generate _  _ SOP.Nil   SOP.Nil    = SOP.Nil
+-- generate cs fs (x :* xs) (y :* ys) = SOP.I (fromMemRep xc xf) :* generate xcs xfs xs ys
+--                                     where
+--                                       (xc, xcs) = split (undefined cs) (unPC x) (npFold PTNil (convertPureChoices xs))
+--                                       (xf, xfs) = split (undefined fs) (unPF y) (npFold PTNil (convertPureFields ys))
 
 -- split :: Product (Eval (l ++ r)) -> Product l -> Product r -> (Product l, Product r)
 -- split xy x y = (splitLeft xy x y, splitRight xy x)
@@ -490,12 +432,12 @@ generate cs fs (x :* xs) (y :* ys) = SOP.I (fromMemRep xc xf) :* generate xcs xf
 -- foldPop x = npFold Nil (npMap xinner)
 
 -- functions to generate pure Choices and Fields
-newtype PC a = PC (Product (Choices a))
+newtype PC a = PC (ProductType (Choices a))
 
-unPC :: PC a -> Product (Choices a)
+unPC :: PC a -> ProductType (Choices a)
 unPC (PC x) = x
 
-convertPureChoices :: NP PC xs -> NP Product (Eval (Map AppChoices xs))
+convertPureChoices :: NP PC xs -> NP ProductType (Eval (Map AppChoices xs))
 convertPureChoices SOP.Nil   = SOP.Nil
 convertPureChoices (x :* xs) = unPC x :* convertPureChoices xs
 
@@ -505,12 +447,12 @@ pureChoices = cpure_NP (Proxy :: Proxy MemRep) emptyChoices'
 emptyChoices' :: forall x . (MemRep x) => PC x
 emptyChoices' = PC $ emptyChoices @x
 
-newtype PF a = PF (Product (Fields a))
+newtype PF a = PF (ProductType (Fields a))
 
-unPF :: PF a -> Product (Fields a)
+unPF :: PF a -> ProductType (Fields a)
 unPF (PF x) = x
 
-convertPureFields :: NP PF xs -> NP Product (Eval (Map AppFields xs))
+convertPureFields :: NP PF xs -> NP ProductType (Eval (Map AppFields xs))
 convertPureFields SOP.Nil   = SOP.Nil
 convertPureFields (x :* xs) = unPF x :* convertPureFields xs
 
