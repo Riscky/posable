@@ -33,8 +33,8 @@ import Data.Type.MemRep
       zipSum,
       split,
       splitLeftWith,
-      splitRightWith,
-      Merge )
+      splitRightWith
+    )
 
 -----------------------------------------------------------------------
 -- Instances for common Haskell datatypes
@@ -88,7 +88,7 @@ instance MemRep Int where
   type Choices Int = '[]
   choices _ = Nil
 
-  type Fields Int = '[Sum '[Int]]
+  type Fields Int = '[ '[Int]]
   fields x = Cons (Pick x Zero) Nil
 
   fromMemRep Nil (Cons (Pick x Zero) Nil) = x
@@ -102,7 +102,7 @@ instance MemRep Float where
   type Choices Float = '[]
   choices _ = Nil
 
-  type Fields Float = '[Sum '[Float]]
+  type Fields Float = '[ '[Float]]
   fields x = Cons (Pick x Zero) Nil
 
   fromMemRep Nil (Cons (Pick x Zero) Nil) = x
@@ -116,7 +116,7 @@ instance MemRep Int8 where
   type Choices Int8 = '[]
   choices _ = Nil
 
-  type Fields Int8 = '[Sum '[Int8]]
+  type Fields Int8 = '[ '[Int8]]
   fields x = Cons (Pick x Zero) Nil
 
   fromMemRep Nil (Cons (Pick x Zero) Nil) = x
@@ -130,7 +130,7 @@ instance MemRep Int16 where
   type Choices Int16 = '[]
   choices _ = Nil
 
-  type Fields Int16 = '[Sum '[Int16]]
+  type Fields Int16 = '[ '[Int16]]
   fields x = Cons (Pick x Zero) Nil
 
   fromMemRep Nil (Cons (Pick x Zero) Nil) = x
@@ -144,11 +144,11 @@ instance MemRep Int16 where
 
 -- Instance for Either, recursively defined
 instance (MemRep l, MemRep r) => MemRep (Either l r) where
-  type Choices (Either l r) = Sum '[Finite 2] ': Eval (ZipWith' Merge (Choices l) (Choices r))
+  type Choices (Either l r) = '[Finite 2] ': Eval (ZipWith' (++) (Choices l) (Choices r))
   choices (Left lv)  = Cons (Pick 0 Zero) (zipSum (choices lv) (emptyChoices @r))
   choices (Right rv) = Cons (Pick 1 Zero) (zipSum (emptyChoices @l) (choices rv))
 
-  type Fields (Either l r) = Eval (ZipWith' Merge (Fields l) (Fields r))
+  type Fields (Either l r) = Eval (ZipWith' (++) (Fields l) (Fields r))
   fields (Left lv)  = zipSum (fields lv) (emptyFields @r)
   fields (Right rv) = zipSum (emptyFields @l) (fields rv)
 

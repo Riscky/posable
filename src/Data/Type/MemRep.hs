@@ -14,7 +14,7 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
-module Data.Type.MemRep (Product(..), Sum(..), MemRep(..), Finite, Remainder(..), ZipWith', Merge, zipSum, splitLeftWith, splitRightWith, rvconcat, split) where
+module Data.Type.MemRep (Product(..), Sum(..), MemRep(..), Finite, Remainder(..), ZipWith', zipSum, splitLeftWith, splitRightWith, rvconcat, split) where
 
 import Generics.SOP
     ( All,
@@ -56,13 +56,13 @@ import qualified Fcf.Class.Monoid as FcfM
 
 -----------------------------------------------------------------------
 -- Heterogeneous lists with explicit types
-data Product :: [*] -> * where
+data Product :: [[*]] -> * where
   Nil :: Product '[]
-  Cons :: (x ~ Sum a) => x -> Product xs -> Product (x ': xs)
+  Cons :: Sum x -> Product xs -> Product (x ': xs)
 
-deriving instance (All Eq xs) => Eq (Product xs)
+deriving instance (All2 Eq xs) => Eq (Product xs)
 
-instance (All Show xs) =>  Show (Product xs) where
+instance (All2 Show xs) =>  Show (Product xs) where
   show Nil = "[]"
   show (Cons a as) = show a ++ " : " ++ show as
 
@@ -123,15 +123,9 @@ type instance Eval (ZipWith' f (a ': as) (b ': bs)) =
 -- type instance Eval (ZipWithNew f (a ': as) (b ': bs)) =
 --   Eval (f a b) ': Eval (ZipWithNew f as bs)
 
-type Merge = (<>)
-
-data (<>) :: * -> * -> Exp *
-
-type instance Eval ((<>) (Sum x) (Sum y)) = Sum (Eval (x ++ y))
-
--- value level implementation of ZipWith' (<>)
+-- value level implementation of ZipWith' (++)
 -- takes the leftmost Pick that is encountered for each element of the Product
-zipSum :: Product l -> Product r -> Product (Eval (ZipWith' (<>) l r))
+zipSum :: Product l -> Product r -> Product (Eval (ZipWith' (++) l r))
 zipSum (Cons (x :: Sum a) xs) (Cons (y :: b) ys) = Cons (takeS x y) (zipSum xs ys)
 zipSum Nil ys = ys
 zipSum xs Nil = xs
@@ -170,12 +164,12 @@ splitRight :: Product (Eval (l ++ r)) -> Product l -> Product r
 splitRight (Cons _ xs) (Cons _ ls) = splitRight xs ls
 splitRight x           Nil         = x
 
-splitLeftWith :: Product (Eval (ZipWith' (<>) l r)) -> Product l -> Product r -> Product l
+splitLeftWith :: Product (Eval (ZipWith' (++) l r)) -> Product l -> Product r -> Product l
 splitLeftWith (Cons x xs) (Cons l ls) (Cons r rs) = Cons (splitSumLeft x l r) (splitLeftWith xs ls rs)
 splitLeftWith x           _         Nil  = x
 splitLeftWith (Cons _ _)  Nil       _    = Nil
 
-splitRightWith :: Product (Eval (ZipWith' (<>) l r)) -> Product l -> Product r -> Product r
+splitRightWith :: Product (Eval (ZipWith' (++) l r)) -> Product l -> Product r -> Product r
 splitRightWith (Cons x xs) (Cons l ls) (Cons r rs) = Cons (splitSumRight x l r) (splitRightWith xs ls rs)
 splitRightWith x           Nil         _           = x
 splitRightWith _           _           Nil         = Nil
@@ -247,7 +241,7 @@ splitSumLeftR3 _         Zero     _ = Zero
 -----------------------------------------------------------------------
 -- MemRep, the king of this file
 class MemRep x where
-  type Choices x :: [*]
+  type Choices x :: [[*]]
   type Choices x = GChoices (SOP I (Code x))
 
   choices :: x -> Product (Choices x)
@@ -269,7 +263,7 @@ class MemRep x where
     ) => Product (Choices x) -> Product (Fields x) -> x
   fromMemRep cs fs = to $ gfromMemRep cs fs
 
-  type Fields x :: [*]
+  type Fields x :: [[*]]
   type Fields x = GFields (SOP I (Code x))
 
   fields :: x -> Product (Fields x)
@@ -305,10 +299,10 @@ class MemRep x where
 -----------------------------------------------------------------------
 -- GMemRep, the serf of this file
 class GMemRep x where
-  type GChoices x :: [*]
+  type GChoices x :: [[*]]
   gchoices :: x -> Product (GChoices x)
 
-  type GFields x :: [*]
+  type GFields x :: [[*]]
   gfields :: x -> Product (GFields x)
 
   gfromMemRep :: Product (GChoices x) -> Product (GFields x) -> x
@@ -407,12 +401,12 @@ instance
     ( All MemRep l
     , All MemRep r
     ) => GMemRep (SOP I '[ l, r]) where
-  type GChoices (SOP I '[ l, r]) =  Sum '[Finite 2] ': Eval (Foldl (ZipWith' (<>)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppChoices) '[ l, r])))))
+  type GChoices (SOP I '[ l, r]) =  '[Finite 2] ': Eval (Foldl (ZipWith' (++)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppChoices) '[ l, r])))))
   gchoices (SOP (Z ls))     = Cons (Pick 0 Zero) (zipSum (npFold Nil (npMap ls)) (npFold Nil (convertPureChoices (pureChoices :: NP PC r))))
   gchoices (SOP (S (Z rs))) = Cons (Pick 1 Zero) (zipSum (npFold Nil (convertPureChoices (pureChoices :: NP PC l))) (npFold Nil (npMap rs)))
   gchoices (SOP (S (S _))) = error "this is not even possible"
 
-  type GFields (SOP I '[ l, r]) = Eval (Foldl (ZipWith' (<>)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) '[ l, r])))))
+  type GFields (SOP I '[ l, r]) = Eval (Foldl (ZipWith' (++)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) '[ l, r])))))
   gfields (SOP (Z ls))     = zipSum (npFold Nil (npMapF ls)) (npFold Nil (convertPureFields (pureFields :: NP PF r)))
   gfields (SOP (S (Z rs))) = zipSum (npFold Nil (convertPureFields (pureFields :: NP PF l))) (npFold Nil (npMapF rs))
   gfields (SOP (S (S _))) = error "this is not even possible"
@@ -427,14 +421,14 @@ instance
     , All MemRep y
     , All MemRep z
     ) => GMemRep (SOP I '[ x, y, z]) where
-  type GChoices (SOP I '[ x, y, z]) =  Sum '[Finite 3] ': Eval (Foldl (ZipWith' (<>)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppChoices) '[ x, y, z])))))
+  type GChoices (SOP I '[ x, y, z]) = '[Finite 3] ': Eval (Foldl (ZipWith' (++)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppChoices) '[ x, y, z])))))
   gchoices (SOP (Z xs))         = Cons (Pick 0 Zero) (zipSum (zipSum (npFold Nil (npMap xs)) (npFold Nil (convertPureChoices (pureChoices :: NP PC y)))) (npFold Nil (convertPureChoices (pureChoices :: NP PC z))))
   gchoices (SOP (S (Z ys)))     = Cons (Pick 1 Zero) (zipSum (zipSum (npFold Nil (convertPureChoices (pureChoices :: NP PC x))) (npFold Nil (npMap ys))) (npFold Nil (convertPureChoices (pureChoices :: NP PC z))))
   gchoices (SOP (S (S (Z zs)))) = Cons (Pick 2 Zero) (zipSum (zipSum (npFold Nil (convertPureChoices (pureChoices :: NP PC x))) (npFold Nil (convertPureChoices (pureChoices :: NP PC y)))) (npFold Nil (npMap zs)))
   -- TODO proof that this is not possible
   gchoices (SOP (S (S (S _)))) = error "this is not even possible"
 
-  type GFields (SOP I '[ x, y, z]) = Eval (Foldl (ZipWith' (<>)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) '[ x, y, z])))))
+  type GFields (SOP I '[ x, y, z]) = Eval (Foldl (ZipWith' (++)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) '[ x, y, z])))))
   gfields (SOP (Z xs))         = zipSum (zipSum (npFold Nil (npMapF xs)) (npFold Nil (convertPureFields (pureFields :: NP PF y)))) (npFold Nil (convertPureFields (pureFields :: NP PF z)))
   gfields (SOP (S (Z ys)))     = zipSum (zipSum (npFold Nil (convertPureFields (pureFields :: NP PF x))) (npFold Nil (npMapF ys))) (npFold Nil (convertPureFields (pureFields :: NP PF z)))
   gfields (SOP (S (S (Z zs)))) = zipSum (zipSum (npFold Nil (convertPureFields (pureFields :: NP PF x))) (npFold Nil (convertPureFields (pureFields :: NP PF y)))) (npFold Nil (npMapF zs))
