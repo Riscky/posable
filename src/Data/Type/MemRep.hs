@@ -14,7 +14,19 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
-module Data.Type.MemRep where
+module Data.Type.MemRep (
+  MemRep(..),
+  ZipWith',
+  Sum(..),
+  Product(Nil, Cons),
+  SumType(..),
+  ProductType(..),
+  rvconcat,
+  rvconcatT
+  , zipSumT
+  , zipSumRight
+  , zipSumLeft
+) where
 
 import Generics.SOP
     ( All,
@@ -31,14 +43,7 @@ import Generics.SOP
       NP((:*)),
       from,
       unI,
-      K(K),
-      POP,
       Proxy(Proxy),
-      mapIK,
-      unSOP,
-      Top,
-      SListI,
-      unPOP,
       to )
 import Data.Finite.Internal (Finite)
 
@@ -47,12 +52,10 @@ import Fcf ( Eval, Exp, type (++), Map)
 import qualified Generics.SOP as SOP
 
 import Data.Kind (Type)
-import Generics.SOP.NP (cpure_POP, cpure_NP)
+import Generics.SOP.NP (cpure_NP)
 
 import GHC.Base (Nat)
 import GHC.TypeLits (type (+))
-import Generics.SOP.NS (expand_SOP, liftA_NS, liftA_SOP)
-import qualified Fcf.Class.Monoid as FcfM
 
 -----------------------------------------------------------------------
 -- Heterogeneous lists with explicit types
@@ -130,10 +133,6 @@ type instance Eval (ZipWith' f (a ': as) (b ': bs)) =
 
 -- value level implementation of ZipWith' (++)
 -- takes the leftmost Pick that is encountered for each element of the Product
-zipSum :: Product l -> Product r -> Product (Eval (ZipWith' (++) l r))
-zipSum (Cons (x :: Sum a) xs) (Cons (y :: b) ys) = Cons (takeS x y) (zipSum xs ys)
-zipSum Nil ys = ys
-zipSum xs Nil = xs
 
 zipSumRight :: ProductType l -> Product r -> Product (Eval (ZipWith' (++) l r))
 zipSumRight (PTCons x xs) (Cons y ys) = Cons (takeRight x y) (zipSumRight xs ys)
@@ -150,7 +149,7 @@ zipSumLeft Nil         (PTCons y ys) = Cons (makeEmpty y) (zipSumLeft Nil ys)
 zipSumLeft xs          PTNil         = xs
 
 makeEmpty :: SumType xs -> Sum xs
-makeEmpty (STSucc x xs) = Skip (makeEmpty xs)
+makeEmpty (STSucc _ xs) = Skip (makeEmpty xs)
 makeEmpty STZero        = Undef
 
 zipSumT :: ProductType l -> ProductType r -> ProductType (Eval (ZipWith' (++) l r))
@@ -158,18 +157,12 @@ zipSumT (PTCons x xs) (PTCons y ys) = PTCons (takeST x y) (zipSumT xs ys)
 zipSumT PTNil ys = ys
 zipSumT xs PTNil = xs
 
--- return leftmost Pick or Empty if no Pick is found
-takeS :: Sum l -> Sum r -> Sum (Eval (l ++ r))
-takeS (Pick l) r = undefined -- Pick l (takeS' ls r)
-takeS (Skip ls)   r = Skip (takeS ls r)
-takeS Undef       r = r
-
 takeST :: SumType l -> SumType r -> SumType (Eval (l ++ r))
 takeST (STSucc l ls) rs = STSucc l (takeST ls rs)
 takeST STZero        rs = rs
 
 takeLeft :: Sum l -> SumType r -> Sum (Eval (l ++ r))
-takeLeft (Pick l)  rs = Pick l
+takeLeft (Pick l)  _  = Pick l
 takeLeft (Skip ls) rs = Skip (takeLeft ls rs)
 takeLeft Undef     rs = makeEmpty rs
 
@@ -179,7 +172,7 @@ takeRight = undefined
 -----------------------------------------------------------------------
 -- MemRep, the king of this file
 class MemRep x where
-  type Choices x :: [[*]]
+  type Choices x :: [[Type]]
   type Choices x = GChoices (SOP I (Code x))
 
   choices :: x -> Product (Choices x)
@@ -201,7 +194,7 @@ class MemRep x where
     ) => Product (Choices x) -> Product (Fields x) -> x
   fromMemRep cs fs = to $ gfromMemRep cs fs
 
-  type Fields x :: [[*]]
+  type Fields x :: [[Type]]
   type Fields x = GFields (SOP I (Code x))
 
   fields :: x -> Product (Fields x)
@@ -237,10 +230,10 @@ class MemRep x where
 -----------------------------------------------------------------------
 -- GMemRep, the serf of this file
 class GMemRep x where
-  type GChoices x :: [[*]]
+  type GChoices x :: [[Type]]
   gchoices :: x -> Product (GChoices x)
 
-  type GFields x :: [[*]]
+  type GFields x :: [[Type]]
   gfields :: x -> Product (GFields x)
 
   gfromMemRep :: Product (GChoices x) -> Product (GFields x) -> x
@@ -252,7 +245,7 @@ class GMemRep x where
 -- Length of typelevel lists
 
 -- adapted Length to lists of lists (sums of products)
-type family Length (xs :: [[*]]) :: Nat where
+type family Length (xs :: [[Type]]) :: Nat where
   Length '[] = 0
   Length (x ': xs) = 1 + Length xs
 
@@ -265,55 +258,9 @@ type family Length (xs :: [[*]]) :: Nat where
 --     go !acc (Z _) = acc
 --     go !acc (S x) = go (acc + 1) x
 
------------------------------------------------------------------------
--- Whole bit of tryout code, to be removed
-sopMap :: (All2 MemRep xs) => SOP I xs -> SOP Product (Eval (Map (Map AppChoices) xs))
-sopMap = undefined
-
--- :t hexpand (K ()) (SOP (S (Z (I 1.0 :* SOP.Nil))))
--- :t hexpand (I ()) (SOP (S (Z (I () :* SOP.Nil))))
--- from https://hackage.haskell.org/package/generics-sop-0.5.1.1/docs/Generics-SOP.html#t:HExpand
--- hexpand [] (SOP (S (Z ([1,2] :* "xyz" :* SOP.Nil)))) :: POP [] '[ '[Bool], '[Int, Char] ]
--- purePOP :: (All SOP.SListI xss) => SOP f xss -> POP f xss
-purePOP :: (All SOP.SListI yss) => SOP I yss -> POP (K ()) yss
-purePOP x = expand_SOP (K ()) $ sopHap x
-
-sopHap :: (All SOP.SListI xss) => SOP I xss -> SOP (K ()) xss
-sopHap = SOP.hliftA (mapIK (const ()))
-
-purePOP' :: (All SOP.SListI yss) => SOP I yss -> POP (K ()) yss
-purePOP' x = expand_SOP (K ()) $ sopHap x
-
--- -- sopHap' :: (All SOP.SListI xss) => SOP I xss -> SOP Product (Eval (Map (Map AppChoices) xss))
--- sopHap' :: (All SListI xss, All2 MemRep xss) => SOP I xss -> SOP (Product <*> Choices <*> Pure) xss
--- sopHap' = mapSOP apChoices
-
--- Expected type: NP I x -> NP (Eval (AppProduct (Map AppChoices))) x
--- Actual type:   NP I x -> NP Product (Eval     (Map AppChoices    x))
-
--- something :: (All Top xss) => (All2 MemRep xss) => SOP I xss -> SOP I (Product (AppChoices x))
--- something = mapNS npMap'
-
--- npMap' :: (All MemRep xs) => NP I xs -> NP (Eval (AppProduct (Map AppChoices))) xs
--- npMap' SOP.Nil   = SOP.Nil
--- npMap' (x :* xs) = choices' (unI x) :* npMap' xs
-
--- choices' :: Product (Eval (Map (Map AppChoices) x))
--- choices' = undefined
-
--- p ~ (NP f a -> g a)
-mapNS :: (All Top xss) => forall f g . (forall x . NP f x -> NP g x) -> SOP f xss -> SOP g xss
-mapNS f = SOP . liftA_NS f . unSOP
-
 npMap :: (All MemRep xs) => NP I xs -> NP Product (Eval (Map AppChoices xs))
 npMap SOP.Nil   = SOP.Nil
 npMap (x :* xs) = choices (unI x) :* npMap xs
-
-apChoices :: (MemRep a) => I a -> Product (Choices a)
-apChoices = choices . unI
-
-mapSOP :: All SListI xss => (forall (a :: k). f a -> g a) -> SOP f xss -> SOP g xss
-mapSOP = liftA_SOP
 
 npFold :: Product ys -> NP Product xs -> Product (Eval (Foldl (++) ys xs))
 npFold acc SOP.Nil   = acc
@@ -461,10 +408,3 @@ pureFields = cpure_NP (Proxy :: Proxy MemRep) emptyFields'
 
 emptyFields' :: forall x . (MemRep x) => PF x
 emptyFields' = PF $ emptyFields @x
-
--- unused random stuff
-xinner :: forall k (f :: k -> *) (xss :: [[k]]). POP f xss -> NP (NP f) xss
-xinner = unPOP
-
-try :: (All2 MemRep xss) => POP PC xss
-try = cpure_POP (Proxy :: Proxy MemRep) emptyChoices'

@@ -31,8 +31,7 @@ import Data.Type.MemRep
       SumType(..),
       ProductType(..),
       rvconcat,
-      rvconcatT,
-      zipSum
+      rvconcatT
     , zipSumT
     , zipSumRight
     , zipSumLeft
