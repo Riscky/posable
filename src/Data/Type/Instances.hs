@@ -35,6 +35,7 @@ import Data.Type.MemRep
     , zipSumT
     , zipSumRight
     , zipSumLeft
+    , split
     )
 
 -----------------------------------------------------------------------
@@ -199,11 +200,10 @@ instance (MemRep x, MemRep y) => MemRep (x, y) where
   emptyChoices = rvconcatT (emptyChoices @x) (emptyChoices @y)
   emptyFields = rvconcatT (emptyFields @x) (emptyFields @y)
 
-  fromMemRep cs fs = undefined -- (fromMemRep xcs xfs, fromMemRep ycs yfs)
-                  --  where
-                  --    (xcs, ycs) = split cs (emptyChoices @x) (emptyChoices @y)
-                  --    (xfs, yfs) = split fs (emptyFields @x) (emptyFields @y)
-
+  fromMemRep cs fs = (fromMemRep xcs xfs, fromMemRep ycs yfs)
+                   where
+                     (xcs, ycs) = split cs (emptyChoices @x) (emptyChoices @y)
+                     (xfs, yfs) = split fs (emptyFields @x) (emptyFields @y)
 
 -- Instance for 3-tuples
 instance (MemRep x, MemRep y, MemRep z) => MemRep (x, y, z) where
@@ -218,10 +218,10 @@ instance (MemRep x, MemRep y, MemRep z) => MemRep (x, y, z) where
   emptyChoices = rvconcatT (rvconcatT (emptyChoices @x) (emptyChoices @y)) (emptyChoices @z)
   emptyFields = rvconcatT (rvconcatT (emptyFields @x) (emptyFields @y)) (emptyFields @z)
 
-  fromMemRep cs fs = undefined -- (fromMemRep xcs xfs, fromMemRep ycs yfs, fromMemRep zcs zfs)
-                  --  where
-                  --   (xycs, zcs) = split cs (rvconcat (emptyChoices @x) (emptyChoices @y)) (emptyChoices @z)
-                  --   (xyfs, zfs) = split fs (rvconcat (emptyFields @x) (emptyFields @y)) (emptyFields @z)
-                  --   (xcs, ycs) = split xycs (emptyChoices @x) (emptyChoices @y)
-                  --   (xfs, yfs) = split xyfs (emptyFields @x) (emptyFields @y)
+  fromMemRep cs fs = (fromMemRep xcs xfs, fromMemRep ycs yfs, fromMemRep zcs zfs)
+                   where
+                    (xycs, zcs) = split cs (rvconcatT (emptyChoices @x) (emptyChoices @y)) (emptyChoices @z)
+                    (xyfs, zfs) = split fs (rvconcatT (emptyFields @x) (emptyFields @y)) (emptyFields @z)
+                    (xcs, ycs) = split xycs (emptyChoices @x) (emptyChoices @y)
+                    (xfs, yfs) = split xyfs (emptyFields @x) (emptyFields @y)
 

@@ -14,19 +14,7 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
-module Data.Type.MemRep (
-  MemRep(..),
-  ZipWith',
-  Sum(..),
-  Product(Nil, Cons),
-  SumType(..),
-  ProductType(..),
-  rvconcat,
-  rvconcatT
-  , zipSumT
-  , zipSumRight
-  , zipSumLeft
-) where
+module Data.Type.MemRep where
 
 import Generics.SOP
     ( All,
@@ -371,9 +359,12 @@ instance (All MemRep as) => GMemRep (SOP I '[as]) where
 --                                       (xc, xcs) = split (undefined cs) (unPC x) (npFold PTNil (convertPureChoices xs))
 --                                       (xf, xfs) = split (undefined fs) (unPF y) (npFold PTNil (convertPureFields ys))
 
--- split :: Product (Eval (l ++ r)) -> Product l -> Product r -> (Product l, Product r)
--- split xy x y = (splitLeft xy x y, splitRight xy x)
-
+split :: Product (Eval (l ++ r)) -> ProductType l -> ProductType r -> (Product l, Product r)
+split (Cons x xs) (PTCons l ls) rs    = (Cons x ls', rs')
+  where
+    (ls', rs') = split xs ls rs
+split xs          PTNil         rs    = (Nil, xs)
+split Nil         PTNil         PTNil = (Nil, Nil)
 
 -- foldPop :: NP PC xss -> Product (Eval (Foldl (++) '[] (Eval (Map AppChoices yss))))
 -- foldPop x = npFold Nil (npMap xinner)
