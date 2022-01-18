@@ -36,7 +36,9 @@ import Data.Type.MemRep
     , zipSumRight
     , zipSumLeft
     , split
+    , split3
     , splitHorizontal
+    , Foldl
     )
 
 -----------------------------------------------------------------------
@@ -69,7 +71,7 @@ data MultiSum x y = First x y
 data Direction n e s = North n
                      | East e
                      | South s
-                     deriving (GHC.Generic, SOP.Generic, MemRep)
+                    --  deriving (GHC.Generic, SOP.Generic, MemRep)
 
 
 -----------------------------------------------------------------------
@@ -148,7 +150,6 @@ instance MemRep Int16 where
   emptyFields = PTCons (STSucc 0 STZero) PTNil
 
 
-
 -- Instance for Either, recursively defined
 instance (MemRep l, MemRep r) => MemRep (Either l r) where
   type Choices (Either l r) = '[Finite 2] ': Eval (ZipWith' (++) (Choices l) (Choices r))
@@ -175,22 +176,25 @@ instance (MemRep l, MemRep r) => MemRep (Either l r) where
   emptyFields = zipSumT (emptyFields @l) (emptyFields @r)
 
 
--- instance (MemRep a, MemRep b) => MemRep (Either (a, b) (b, a)) where
---   type Choices (Either (a, b) (b, a)) = Sum '[Finite 2] ': Eval (ZipWith' (<>) (Choices (a, b)) (Choices (b, a)))
---   choices (Left x)  = Cons (Pick 0 Zero) (zipSum (choices x) (emptyChoices @ (b, a)))
---   choices (Right x) = Cons (Pick 1 Zero) (zipSum (emptyChoices @ (a,b)) (choices x))
+-- Instance for Direction, recursively defined
+instance (MemRep n, MemRep e, MemRep s) => MemRep (Direction n e s) where
+  type Choices (Direction n e s) = '[Finite 3] ': Eval (Foldl (ZipWith' (++)) '[] '[ Choices n, Choices e, Choices s])
+  choices (North nv) = Cons (Pick 0) (zipSumLeft  (zipSumLeft  (choices nv) (emptyChoices @e)) (emptyChoices @s))
+  choices (East  ev) = Cons (Pick 1) (zipSumLeft  (zipSumRight (emptyChoices @n) (choices ev)) (emptyChoices @s))
+  choices (South sv) = Cons (Pick 3) (zipSumRight (zipSumT     (emptyChoices @n) (emptyChoices @e)) (choices sv))
 
---   type Fields (Either (a, b) (b, a)) = Fields (a, b)
---   fields (Left  (a,b)) = fields (a,b)
---   fields (Right (b,a)) = fields (a,b)
+  type Fields (Direction n e s) =  Eval (Foldl (ZipWith' (++)) '[] '[ Fields n, Fields e, Fields s])
+  fields (North nv) = zipSumLeft  (zipSumLeft  (fields nv) (emptyFields @e)) (emptyFields @s)
+  fields (East  ev) = zipSumLeft  (zipSumRight (emptyFields @n) (fields ev)) (emptyFields @s)
+  fields (South sv) = zipSumRight (zipSumT     (emptyFields @n) (emptyFields @e)) (fields sv)
 
---   fromMemRep (Cons (Pick 0 Zero) cs) fs = Left (fromMemRep cs fs)
---   fromMemRep (Cons (Pick 1 Zero) cs) fs | (a,b) <- fromMemRep cs fs = Right (b,a)
+  fromMemRep (Cons (Pick 0) cs) fs = undefined
+  fromMemRep (Cons (Pick 1) cs) fs = undefined
+  fromMemRep (Cons (Pick 3) cs) fs = undefined
+  fromMemRep (Cons _             _)  _  = error "constructor index out of bounds"
 
-  -- widths = [16]
-
-  -- emptyChoices = Nil
-  -- emptyFields = Cons (Pick 0 Zero) Nil
+  emptyChoices = PTCons (STSucc 0 STZero) (zipSumT (zipSumT (emptyChoices @n) (emptyChoices @e)) (emptyChoices @s))
+  emptyFields = zipSumT (zipSumT (emptyFields @n) (emptyFields @e)) (emptyFields @s)
 
 -- Instance for product types (tuples)
 instance (MemRep x, MemRep y) => MemRep (x, y) where
@@ -225,8 +229,6 @@ instance (MemRep x, MemRep y, MemRep z) => MemRep (x, y, z) where
 
   fromMemRep cs fs = (fromMemRep xcs xfs, fromMemRep ycs yfs, fromMemRep zcs zfs)
                    where
-                    (xycs, zcs) = split cs (rvconcatT (emptyChoices @x) (emptyChoices @y)) (emptyChoices @z)
-                    (xyfs, zfs) = split fs (rvconcatT (emptyFields @x) (emptyFields @y)) (emptyFields @z)
-                    (xcs, ycs) = split xycs (emptyChoices @x) (emptyChoices @y)
-                    (xfs, yfs) = split xyfs (emptyFields @x) (emptyFields @y)
+                    (xcs, (ycs, zcs)) = split3 cs (emptyChoices @x) (emptyChoices @y) (emptyChoices @z)
+                    (xfs, (yfs, zfs)) = split3 fs (emptyFields @x) (emptyFields @y) (emptyFields @z)
 

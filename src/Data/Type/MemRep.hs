@@ -369,10 +369,32 @@ instance (All MemRep as) => GMemRep (SOP I '[as]) where
 --                                       (xf, xfs) = split (undefined fs) (unPF y) (npFold PTNil (convertPureFields ys))
 
 split :: Product (Eval (l ++ r)) -> ProductType l -> ProductType r -> (Product l, Product r)
-split (Cons x xs) (PTCons _ ls) rs    = (Cons x ls', rs')
+split (Cons x xs) (PTCons _ ls) rs = (Cons x ls', rs')
   where
     (ls', rs') = split xs ls rs
-split xs          PTNil         _    = (Nil, xs)
+split xs PTNil _ = (Nil, xs)
+
+split3 :: Product (Eval (Eval (x ++ y) ++ z)) -> ProductType x -> ProductType y -> ProductType z -> (Product x, (Product y, Product z))
+split3 (Cons a as) (PTCons _ xs) ys zs = (Cons a xs', yz)
+  where
+    (xs', yz) = split3 as xs ys zs
+split3 as PTNil ys zs = (Nil, split as ys zs)
+
+-- splits :: Product (Eval (Foldl (++) '[] xs)) -> ProductTypes xs -> Products xs
+-- splits (Cons x xs) (PSTCons (PTCons (y :: SumType f1) (ys :: ProductType f2)) (yss :: ProductTypes f3)) = PSCons (Cons (x :: Sum f1) (xs' :: Product f2)) (ys' :: Products f3)
+--   where
+--     PSCons xs' ys' = splits xs (PSTCons ys yss)
+-- splits xs          (PSTCons PTNil yss)         = PSCons Nil (splits xs yss)
+-- splits Nil         PSTNil                      = PSNil
+
+-- data ProductTypes :: [[[Type]]] -> Type where
+--   PSTCons :: ProductType x -> ProductTypes xs -> ProductTypes (x ': xs)
+--   PSTNil  :: ProductTypes '[]
+
+-- data Products :: [[[Type]]] -> Type where
+--   PSCons :: Product x -> Products xs -> Products (x ': xs)
+--   PSNil  :: Products '[]
+
 
 splitHorizontal :: Product (Eval (ZipWith' (++) l r)) -> ProductType l -> ProductType r -> (Product l, Product r)
 splitHorizontal Nil PTNil         PTNil         = (Nil, Nil)
