@@ -57,6 +57,10 @@ data Product :: [[Type]] -> Type where
 
 deriving instance (All2 Eq xs) => Eq (Product xs)
 
+instance (All2 Show xs) => Show (ProductType xs) where
+  show PTNil = "[]"
+  show (PTCons a as) = show a ++ " : " ++ show as
+
 instance (All2 Show xs) =>  Show (Product xs) where
   show Nil = "[]"
   show (Cons a as) = show a ++ " : " ++ show as
@@ -88,6 +92,11 @@ data Sum :: [Type] -> Type where
   Undef :: Sum '[]
 
 deriving instance (All Eq xs) => Eq (Sum xs)
+
+instance (All Show x) => Show (SumType x) where
+  show (STSucc x STZero) = show x
+  show (STSucc x xs)     = show x ++ "|" ++ show xs
+  show STZero            = "empty"
 
 instance (All Show x) => Show (Sum x) where
   show (Pick x) = show x

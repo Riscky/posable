@@ -17,7 +17,7 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 {-# OPTIONS_GHC -Wno-missing-methods #-}
 
-module Data.Type.Instances (Bool, Maybe, Either) where
+module Data.Type.Instances where
 import qualified GHC.Generics as GHC
 import Data.Int (Int8, Int16)
 import qualified Generics.SOP as SOP
