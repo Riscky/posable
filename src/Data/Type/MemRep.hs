@@ -369,11 +369,26 @@ instance (All MemRep as) => GMemRep (SOP I '[as]) where
 --                                       (xf, xfs) = split (undefined fs) (unPF y) (npFold PTNil (convertPureFields ys))
 
 split :: Product (Eval (l ++ r)) -> ProductType l -> ProductType r -> (Product l, Product r)
-split (Cons x xs) (PTCons l ls) rs    = (Cons x ls', rs')
+split (Cons x xs) (PTCons _ ls) rs    = (Cons x ls', rs')
   where
     (ls', rs') = split xs ls rs
-split xs          PTNil         rs    = (Nil, xs)
-split Nil         PTNil         PTNil = (Nil, Nil)
+split xs          PTNil         _    = (Nil, xs)
+
+splitHorizontal :: Product (Eval (ZipWith' (++) l r)) -> ProductType l -> ProductType r -> (Product l, Product r)
+splitHorizontal Nil PTNil         PTNil         = (Nil, Nil)
+splitHorizontal x   PTNil         (PTCons _ _) = (Nil, x)
+splitHorizontal x   (PTCons _ _)  PTNil         = (x, Nil)
+splitHorizontal (Cons x xs) (PTCons l ls) (PTCons r rs) = (Cons l' ls', Cons r' rs')
+  where
+    (l', r') = splitSum x l r
+    (ls', rs') = splitHorizontal xs ls rs
+
+splitSum :: Sum (Eval (l ++ r)) -> SumType l -> SumType r -> (Sum l, Sum r)
+splitSum (Pick x)  (STSucc _ _)  rs = (Pick x, makeEmpty rs)
+splitSum (Skip xs) (STSucc _ ls) rs = (Skip l', r')
+  where
+    (l', r') = splitSum xs ls rs
+splitSum xs        STZero        _  = (Undef, xs)
 
 -- foldPop :: NP PC xss -> Product (Eval (Foldl (++) '[] (Eval (Map AppChoices yss))))
 -- foldPop x = npFold Nil (npMap xinner)

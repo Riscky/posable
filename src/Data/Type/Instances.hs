@@ -36,6 +36,7 @@ import Data.Type.MemRep
     , zipSumRight
     , zipSumLeft
     , split
+    , splitHorizontal
     )
 
 -----------------------------------------------------------------------
@@ -94,6 +95,7 @@ instance MemRep Int where
   fields x = Cons (Pick x) Nil
 
   fromMemRep Nil (Cons (Pick x) Nil) = x
+  fromMemRep Nil _ = undefined
 
   widths = [32]
 
@@ -108,6 +110,7 @@ instance MemRep Float where
   fields x = Cons (Pick x) Nil
 
   fromMemRep Nil (Cons (Pick x) Nil) = x
+  fromMemRep Nil _ = undefined
 
   widths = [32]
 
@@ -122,6 +125,7 @@ instance MemRep Int8 where
   fields x = Cons (Pick x) Nil
 
   fromMemRep Nil (Cons (Pick x) Nil) = x
+  fromMemRep Nil _ = undefined
 
   widths = [8]
 
@@ -136,6 +140,7 @@ instance MemRep Int16 where
   fields x = Cons (Pick x) Nil
 
   fromMemRep Nil (Cons (Pick x) Nil) = x
+  fromMemRep Nil _ = undefined
 
   widths = [16]
 
@@ -156,14 +161,14 @@ instance (MemRep l, MemRep r) => MemRep (Either l r) where
 
   widths = zipWith max (widths @l) (widths @r)
 
-  fromMemRep (Cons (Pick 0) cs) fs = undefined --  Left (fromMemRep lcs lfs)
-                                        -- where
-                                        --   lcs = splitLeftWith cs (emptyChoices @l) (emptyChoices @r)
-                                        --   lfs = splitLeftWith fs (emptyFields @l)  (emptyFields @r)
-  fromMemRep (Cons (Pick 1) cs) fs = undefined -- Right (fromMemRep rcs rfs)
-                                        -- where
-                                        --   rcs = splitRightWith cs (emptyChoices @l) (emptyChoices @r)
-                                        --   rfs = splitRightWith fs (emptyFields @l) (emptyFields @r)
+  fromMemRep (Cons (Pick 0) cs) fs = Left (fromMemRep lcs lfs)
+                                        where
+                                          (lcs,_) = splitHorizontal cs (emptyChoices @l) (emptyChoices @r)
+                                          (lfs,_) = splitHorizontal fs (emptyFields @l)  (emptyFields @r)
+  fromMemRep (Cons (Pick 1) cs) fs = Right (fromMemRep rcs rfs)
+                                        where
+                                          (_,rcs) = splitHorizontal cs (emptyChoices @l) (emptyChoices @r)
+                                          (_,rfs) = splitHorizontal fs (emptyFields @l) (emptyFields @r)
   fromMemRep (Cons _             _)  _  = error "constructor index out of bounds"
 
   emptyChoices = PTCons (STSucc 0 STZero) (zipSumT (emptyChoices @l) (emptyChoices @r))
