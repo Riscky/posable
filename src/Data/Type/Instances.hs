@@ -25,7 +25,15 @@ import Data.Int (Int8, Int16)
 import qualified Generics.SOP as SOP
 import Fcf (Eval, type (++))
 import Data.Type.MemRep
-import Data.Finite (finite, add, multiply, combineProduct, combineSum)
+import Data.Finite (
+  finite,
+  add,
+  multiply,
+  combineProduct,
+  combineSum,
+  separateProduct
+  , separateSum
+  )
 import GHC.TypeNats (type (+), type (*))
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -147,21 +155,20 @@ instance (MemRep l, MemRep r) => MemRep (Either l r) where
   choices (Left lv)  = combineSum (Left (choices lv))
   choices (Right rv) = combineSum (Right (choices rv))
 
+  emptyChoices = emptyChoices @l + emptyChoices @r
+
   type Fields (Either l r) = Eval (ZipWith' (++) (Fields l) (Fields r))
   fields (Left lv)  = zipSumLeft (fields lv) (emptyFields @r)
   fields (Right rv) = zipSumRight (emptyFields @l) (fields rv)
 
   widths = zipWith max (widths @l) (widths @r)
 
-  fromMemRep = undefined --(Cons (Pick 0) cs) fs = Left (fromMemRep lcs lfs)
-  --                                       where
-  --                                         (lcs,_) = splitHorizontal cs (emptyChoices @l) (emptyChoices @r)
-  --                                         (lfs,_) = splitHorizontal fs (emptyFields @l)  (emptyFields @r)
-  -- fromMemRep (Cons (Pick 1) cs) fs = Right (fromMemRep rcs rfs)
-  --                                       where
-  --                                         (_,rcs) = splitHorizontal cs (emptyChoices @l) (emptyChoices @r)
-  --                                         (_,rfs) = splitHorizontal fs (emptyFields @l) (emptyFields @r)
-  -- fromMemRep (Cons _             _)  _  = error "constructor index out of bounds"
+  fromMemRep cs fs = case cs' of
+      Left lcs -> Left (fromMemRep lcs lfs)
+      Right rcs -> Right (fromMemRep rcs rfs)
+    where
+      cs' = separateSum (unsafeCoerce cs) -- Not sure if safe
+      (lfs,rfs) = splitHorizontal fs (emptyFields @l)  (emptyFields @r)
 
   emptyFields = zipSumT (emptyFields @l) (emptyFields @r)
 
@@ -207,10 +214,10 @@ instance (MemRep x, MemRep y) => MemRep (x, y) where
 
   emptyFields = rvconcatT (emptyFields @x) (emptyFields @y)
 
-  fromMemRep cs fs = undefined --
-  -- fromMemRep cs fs = (fromMemRep xcs xfs, fromMemRep ycs yfs)
-  --                  where
-  --                    (xfs, yfs) = split fs (emptyFields @x) (emptyFields @y)
+  fromMemRep cs fs = (fromMemRep xcs xfs, fromMemRep ycs yfs)
+                   where
+                     (xcs, ycs) = separateProduct cs
+                     (xfs, yfs) = split fs (emptyFields @x) (emptyFields @y)
 
 -- Instance for 3-tuples
 instance (MemRep x, MemRep y, MemRep z) => MemRep (x, y, z) where
