@@ -36,7 +36,7 @@ import Generics.SOP
       to )
 import Data.Finite (Finite, finite)
 
-import Fcf ( Eval, Exp, type (++), Map)
+import Fcf ( Eval, Exp, type (++), Map, type (+))
 
 import qualified Generics.SOP as SOP
 
@@ -44,7 +44,7 @@ import Data.Kind (Type)
 import Generics.SOP.NP (cpure_NP)
 
 import GHC.Base (Nat)
-import GHC.TypeLits (type (+), type (*), natVal)
+import GHC.TypeLits (type (*), natVal, KnownNat)
 
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -182,14 +182,20 @@ takeRight STZero        rs = rs
 
 -----------------------------------------------------------------------
 -- MemRep, the king of this file
-class MemRep x where
+class (KnownNat (Choices x)) => MemRep x where
   type Choices x :: Nat
   type Choices x = GChoices (SOP I (Code x))
 
   choices :: x -> Finite (Choices x)
+  default choices ::
+    ( Generic x
+    , (GMemRep (SOP I (Code x)))
+    , GChoices (SOP I (Code x)) ~ Choices x
+    ) => x -> Finite (Choices x)
+  choices x = gchoices $ from x
 
-  emptyChoices :: Int
-  default emptyChoices :: (GMemRep (SOP I (Code x))) => Int
+  emptyChoices :: Integer
+  default emptyChoices :: (GMemRep (SOP I (Code x))) => Integer
   emptyChoices = gemptyChoices @(SOP I (Code x))
 
   fromMemRep :: Finite (Choices x) -> Product (Fields x) -> x
@@ -229,11 +235,11 @@ class MemRep x where
 
 -----------------------------------------------------------------------
 -- GMemRep, the serf of this file
-class GMemRep x where
+class (KnownNat (GChoices x)) =>  GMemRep x where
   type GChoices x :: Nat
   gchoices :: x -> Finite (GChoices x)
 
-  gemptyChoices :: Int
+  gemptyChoices :: Integer
 
   type GFields x :: [[Type]]
   gfields :: x -> Product (GFields x)
@@ -248,7 +254,7 @@ class GMemRep x where
 -- adapted Length to lists of lists (sums of products)
 type family Length (xs :: [[Type]]) :: Nat where
   Length '[] = 0
-  Length (x ': xs) = 1 + Length xs
+  Length (x ': xs) = Eval (1 + Length xs)
 
 -- typesafe version of index_NS, implementation doesn't compile yet
 -- stolen from https://hackage.haskell.org/package/sop-core-0.5.0.1/docs/src/Data.SOP.Classes.html#hindex
@@ -287,7 +293,7 @@ instance
     ( All MemRep l
     , All MemRep r
     ) => GMemRep (SOP I '[ l, r]) where
-  -- type GChoices (SOP I '[ l, r]) =  Choices l + Choices r
+  type GChoices (SOP I '[ l, r]) = 0 -- TODO Choices l + Choices r
   -- gchoices (SOP (Z ls))     = finite 0
   -- gchoices (SOP (S (Z rs))) = finite (emptyChoices @l)
   -- gchoices (SOP (S (S _))) = error "this is not even possible"
@@ -306,7 +312,7 @@ instance
     , All MemRep y
     , All MemRep z
     ) => GMemRep (SOP I '[ x, y, z]) where
-  -- type GChoices (SOP I '[ x, y, z]) = Choices x + Choices y + Choices z
+  type GChoices (SOP I '[ x, y, z]) = 0 -- TODO
   -- gchoices (SOP (Z xs))         = finite 0
   -- gchoices (SOP (S (Z ys)))     = emptyChoices @x
   -- gchoices (SOP (S (S (Z zs)))) = emptyChoices @x + emptyChoices @y
@@ -341,7 +347,7 @@ type instance Eval (Foldl f y (x ': xs)) = Eval (Foldl f (Eval (f y x)) xs)
 
 -- generic instance for unary sums (tuples)
 instance (All MemRep as) => GMemRep (SOP I '[as]) where
-  -- type GChoices (SOP I '[as]) = Eval (Foldl 1 (*) (Eval (Map AppChoices as)))
+  type GChoices (SOP I '[as]) = 1
   -- gchoices _ = finite 0
 
   type GFields (SOP I '[as]) = Eval (Foldl (++) '[] (Eval (Map AppFields as)))

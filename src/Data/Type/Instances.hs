@@ -16,14 +16,18 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 {-# OPTIONS_GHC -Wno-missing-methods #-}
+{-# LANGUAGE NoStarIsType #-}
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 
 module Data.Type.Instances where
 import qualified GHC.Generics as GHC
 import Data.Int (Int8, Int16)
 import qualified Generics.SOP as SOP
-import Data.Finite (Finite)
 import Fcf (Eval, type (++))
 import Data.Type.MemRep
+import Data.Finite (finite)
+import GHC.TypeNats (type (+))
+
 
 -----------------------------------------------------------------------
 -- Instances for common Haskell datatypes
@@ -81,6 +85,7 @@ instance MemRep Int where
   fields x = Cons (Pick x) Nil
 
   fromMemRep 0 (Cons (Pick x) Nil) = x
+  fromMemRep _ _ = error "index out of range"
 
   widths = [32]
 
@@ -96,6 +101,7 @@ instance MemRep Float where
   fields x = Cons (Pick x) Nil
 
   fromMemRep 0 (Cons (Pick x) Nil) = x
+  fromMemRep _ _ = error "index out of range"
 
   widths = [32]
 
@@ -110,6 +116,7 @@ instance MemRep Int8 where
   fields x = Cons (Pick x) Nil
 
   fromMemRep 0 (Cons (Pick x) Nil) = x
+  fromMemRep _ _ = error "index out of range"
 
   widths = [8]
 
@@ -124,6 +131,7 @@ instance MemRep Int16 where
   fields x = Cons (Pick x) Nil
 
   fromMemRep 0 (Cons (Pick x) Nil) = x
+  fromMemRep _ _ = error "index out of range"
 
   widths = [16]
 
@@ -133,9 +141,9 @@ instance MemRep Int16 where
 
 -- Instance for Either, recursively defined
 instance (MemRep l, MemRep r) => MemRep (Either l r) where
-  -- type Choices (Either l r) = '[Finite 2] ': Eval (ZipWith' (++) (Choices l) (Choices r))
-  -- choices (Left lv)  = Cons (Pick 0) (zipSumLeft (choices lv) (emptyChoices @r))
-  -- choices (Right rv) = Cons (Pick 1) (zipSumRight (emptyChoices @l) (choices rv))
+  type Choices (Either l r) = Choices l + Choices r
+  choices (Left _)  = 0
+  choices (Right _) = finite (emptyChoices @l)
 
   type Fields (Either l r) = Eval (ZipWith' (++) (Fields l) (Fields r))
   fields (Left lv)  = zipSumLeft (fields lv) (emptyFields @r)
@@ -143,7 +151,7 @@ instance (MemRep l, MemRep r) => MemRep (Either l r) where
 
   widths = zipWith max (widths @l) (widths @r)
 
-  -- fromMemRep (Cons (Pick 0) cs) fs = Left (fromMemRep lcs lfs)
+  fromMemRep = undefined --(Cons (Pick 0) cs) fs = Left (fromMemRep lcs lfs)
   --                                       where
   --                                         (lcs,_) = splitHorizontal cs (emptyChoices @l) (emptyChoices @r)
   --                                         (lfs,_) = splitHorizontal fs (emptyFields @l)  (emptyFields @r)
@@ -158,10 +166,10 @@ instance (MemRep l, MemRep r) => MemRep (Either l r) where
 
 -- Instance for Direction, recursively defined
 instance (MemRep n, MemRep e, MemRep s) => MemRep (Direction n e s) where
-  type Choices (Direction n e s) = 3 -- TODO should be merged from n, e, s
-  choices (North nv) = 0
-  choices (East  ev) = 1
-  choices (South sv) = 2
+  type Choices (Direction n e s) = Choices n + Choices e + Choices s
+  choices (North _) = 0
+  choices (East  _) = finite (emptyChoices @n)
+  choices (South _) = finite (emptyChoices @n + emptyChoices @e)
 
   type Fields (Direction n e s) =  Eval (Foldl (ZipWith' (++)) '[] '[ Fields n, Fields e, Fields s])
   fields (North nv) = zipSumLeft  (zipSumLeft  (fields nv) (emptyFields @e)) (emptyFields @s)
