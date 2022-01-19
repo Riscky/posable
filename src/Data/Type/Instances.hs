@@ -24,22 +24,6 @@ import qualified Generics.SOP as SOP
 import Data.Finite (Finite)
 import Fcf (Eval, type (++))
 import Data.Type.MemRep
-    ( MemRep(..),
-      ZipWith',
-      Sum(..),
-      Product(Nil, Cons),
-      SumType(..),
-      ProductType(..),
-      rvconcat,
-      rvconcatT
-    , zipSumT
-    , zipSumRight
-    , zipSumLeft
-    , split
-    , split3
-    , splitHorizontal
-    , Foldl
-    )
 
 -----------------------------------------------------------------------
 -- Instances for common Haskell datatypes
@@ -188,10 +172,19 @@ instance (MemRep n, MemRep e, MemRep s) => MemRep (Direction n e s) where
   fields (East  ev) = zipSumLeft  (zipSumRight (emptyFields @n) (fields ev)) (emptyFields @s)
   fields (South sv) = zipSumRight (zipSumT     (emptyFields @n) (emptyFields @e)) (fields sv)
 
-  fromMemRep (Cons (Pick 0) cs) fs = undefined
-  fromMemRep (Cons (Pick 1) cs) fs = undefined
-  fromMemRep (Cons (Pick 3) cs) fs = undefined
-  fromMemRep (Cons _             _)  _  = error "constructor index out of bounds"
+  fromMemRep (Cons (Pick 0) cs) fs = North (fromMemRep ncs nfs)
+    where
+      (ncs, _, _) = splitHorizontal3 cs (emptyChoices @n) (emptyChoices @e) (emptyChoices @s)
+      (nfs, _, _) = splitHorizontal3 fs (emptyFields @n) (emptyFields @e) (emptyFields @s)
+  fromMemRep (Cons (Pick 1) cs) fs = East (fromMemRep ecs efs)
+    where
+      (_, ecs, _) = splitHorizontal3 cs (emptyChoices @n) (emptyChoices @e) (emptyChoices @s)
+      (_, efs, _) = splitHorizontal3 fs (emptyFields @n) (emptyFields @e) (emptyFields @s)
+  fromMemRep (Cons (Pick 3) cs) fs = South (fromMemRep scs sfs)
+    where
+      (_, _, scs) = splitHorizontal3 cs (emptyChoices @n) (emptyChoices @e) (emptyChoices @s)
+      (_, _, sfs) = splitHorizontal3 fs (emptyFields @n) (emptyFields @e) (emptyFields @s)
+  fromMemRep _                  _  = error "constructor index out of bounds"
 
   emptyChoices = PTCons (STSucc 0 STZero) (zipSumT (zipSumT (emptyChoices @n) (emptyChoices @e)) (emptyChoices @s))
   emptyFields = zipSumT (zipSumT (emptyFields @n) (emptyFields @e)) (emptyFields @s)
@@ -229,6 +222,6 @@ instance (MemRep x, MemRep y, MemRep z) => MemRep (x, y, z) where
 
   fromMemRep cs fs = (fromMemRep xcs xfs, fromMemRep ycs yfs, fromMemRep zcs zfs)
                    where
-                    (xcs, (ycs, zcs)) = split3 cs (emptyChoices @x) (emptyChoices @y) (emptyChoices @z)
-                    (xfs, (yfs, zfs)) = split3 fs (emptyFields @x) (emptyFields @y) (emptyFields @z)
+                    (PSCons xcs (PSCons ycs (PSCons zcs PSNil))) = splits cs $ PSTCons (emptyChoices @x) $ PSTCons (emptyChoices @y) $ PSTCons (emptyChoices @z) PSTNil
+                    (PSCons xfs (PSCons yfs (PSCons zfs PSNil))) = splits fs $ PSTCons (emptyFields @x)  $ PSTCons (emptyFields @y)  $ PSTCons (emptyFields @z)  PSTNil
 

@@ -45,6 +45,8 @@ import Generics.SOP.NP (cpure_NP)
 import GHC.Base (Nat)
 import GHC.TypeLits (type (+))
 
+import Unsafe.Coerce (unsafeCoerce)
+
 -----------------------------------------------------------------------
 -- Heterogeneous lists with explicit types
 data ProductType :: [[Type]] -> Type where
@@ -380,21 +382,22 @@ split3 (Cons a as) (PTCons _ xs) ys zs = (Cons a xs', yz)
     (xs', yz) = split3 as xs ys zs
 split3 as PTNil ys zs = (Nil, split as ys zs)
 
--- splits :: Product (Eval (Foldl (++) '[] xs)) -> ProductTypes xs -> Products xs
--- splits (Cons x xs) (PSTCons (PTCons (y :: SumType f1) (ys :: ProductType f2)) (yss :: ProductTypes f3)) = PSCons (Cons (x :: Sum f1) (xs' :: Product f2)) (ys' :: Products f3)
---   where
---     PSCons xs' ys' = splits xs (PSTCons ys yss)
--- splits xs          (PSTCons PTNil yss)         = PSCons Nil (splits xs yss)
--- splits Nil         PSTNil                      = PSNil
+-- Using unsafeCoerce because I can't get the typechecker to understand Foldl
+splits :: Product (Eval (Foldl (++) '[] xs)) -> ProductTypes xs -> Products xs
+splits (Cons x xs) (PSTCons (PTCons _ ys) yss) = unsafeCoerce $ PSCons (Cons x xs') ys'
+  where
+    PSCons xs' ys' = splits (unsafeCoerce xs) (PSTCons ys yss)
+splits xs          (PSTCons PTNil yss)         = PSCons Nil (splits xs yss)
+splits Nil         PSTNil                      = PSNil
+splits Nil         (PSTCons (PTCons _ _) _) = error "types are not equivalent"
 
--- data ProductTypes :: [[[Type]]] -> Type where
---   PSTCons :: ProductType x -> ProductTypes xs -> ProductTypes (x ': xs)
---   PSTNil  :: ProductTypes '[]
+data ProductTypes :: [[[Type]]] -> Type where
+  PSTCons :: ProductType x -> ProductTypes xs -> ProductTypes (x ': xs)
+  PSTNil  :: ProductTypes '[]
 
--- data Products :: [[[Type]]] -> Type where
---   PSCons :: Product x -> Products xs -> Products (x ': xs)
---   PSNil  :: Products '[]
-
+data Products :: [[[Type]]] -> Type where
+  PSCons :: Product x -> Products xs -> Products (x ': xs)
+  PSNil  :: Products '[]
 
 splitHorizontal :: Product (Eval (ZipWith' (++) l r)) -> ProductType l -> ProductType r -> (Product l, Product r)
 splitHorizontal Nil PTNil         PTNil         = (Nil, Nil)
@@ -405,12 +408,41 @@ splitHorizontal (Cons x xs) (PTCons l ls) (PTCons r rs) = (Cons l' ls', Cons r' 
     (l', r') = splitSum x l r
     (ls', rs') = splitHorizontal xs ls rs
 
+splitHorizontal3 :: Product (Eval (ZipWith' (++) (Eval (ZipWith' (++) x y)) z)) -> ProductType x -> ProductType y -> ProductType z -> (Product x, Product y, Product z)
+splitHorizontal3 Nil PTNil         PTNil         PTNil         = (Nil, Nil, Nil)
+splitHorizontal3 a   (PTCons _ _)  PTNil         PTNil         = (a, Nil, Nil)
+splitHorizontal3 a   PTNil         (PTCons _ _)  PTNil         = (Nil, a, Nil)
+splitHorizontal3 a   PTNil         PTNil         (PTCons _ _ ) = (Nil, Nil, a)
+splitHorizontal3 a   x             y             PTNil         = (x', y', Nil)
+  where
+    (x', y') = splitHorizontal a x y
+splitHorizontal3 a   x             PTNil         z             = (x', Nil, z')
+  where
+    (x', z') = splitHorizontal a x z
+splitHorizontal3 a   PTNil         y             z             = (Nil, y', z')
+  where
+    (y', z') = splitHorizontal a y z
+splitHorizontal3 (Cons a as) (PTCons x xs) (PTCons y ys) (PTCons z zs) = (Cons x' xs', Cons y' ys', Cons z' zs')
+  where
+    (x', y', z') = splitSum3 a x y z
+    (xs', ys', zs') = splitHorizontal3 as xs ys zs
+
 splitSum :: Sum (Eval (l ++ r)) -> SumType l -> SumType r -> (Sum l, Sum r)
 splitSum (Pick x)  (STSucc _ _)  rs = (Pick x, makeEmpty rs)
 splitSum (Skip xs) (STSucc _ ls) rs = (Skip l', r')
   where
     (l', r') = splitSum xs ls rs
 splitSum xs        STZero        _  = (Undef, xs)
+
+splitSum3 :: Sum (Eval (Eval (x ++ y) ++ z)) -> SumType x -> SumType y -> SumType z -> (Sum x, Sum y, Sum z)
+splitSum3 (Pick a)  (STSucc _ _)  ys zs = (Pick a, makeEmpty ys, makeEmpty zs)
+splitSum3 as        STZero        ys zs  = (Undef, ys', zs')
+  where
+    (ys', zs') = splitSum as ys zs
+splitSum3 (Skip as) (STSucc _ xs) ys zs = (Skip xs', ys', zs')
+  where
+    (xs', ys', zs') = splitSum3 as xs ys zs
+
 
 -- foldPop :: NP PC xss -> Product (Eval (Foldl (++) '[] (Eval (Map AppChoices yss))))
 -- foldPop x = npFold Nil (npMap xinner)
