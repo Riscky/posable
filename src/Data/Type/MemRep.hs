@@ -13,6 +13,7 @@
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE NoStarIsType #-}
 
 module Data.Type.MemRep where
 
@@ -33,7 +34,7 @@ import Generics.SOP
       unI,
       Proxy(Proxy),
       to )
-import Data.Finite.Internal (Finite)
+import Data.Finite (Finite, finite)
 
 import Fcf ( Eval, Exp, type (++), Map)
 
@@ -43,7 +44,7 @@ import Data.Kind (Type)
 import Generics.SOP.NP (cpure_NP)
 
 import GHC.Base (Nat)
-import GHC.TypeLits (type (+))
+import GHC.TypeLits (type (+), type (*), natVal)
 
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -63,7 +64,7 @@ instance (All2 Show xs) => Show (ProductType xs) where
   show PTNil = "[]"
   show (PTCons a as) = show a ++ " : " ++ show as
 
-instance (All2 Show xs) =>  Show (Product xs) where
+instance (All2 Show xs) => Show (Product xs) where
   show Nil = "[]"
   show (Cons a as) = show a ++ " : " ++ show as
 
@@ -182,26 +183,23 @@ takeRight STZero        rs = rs
 -----------------------------------------------------------------------
 -- MemRep, the king of this file
 class MemRep x where
-  type Choices x :: [[Type]]
+  type Choices x :: Nat
   type Choices x = GChoices (SOP I (Code x))
 
-  choices :: x -> Product (Choices x)
+  choices :: x -> Finite (Choices x)
 
-  default choices ::
-    ( Generic x
-    , Choices x ~ GChoices (SOP I (Code x))
-    , GMemRep (SOP I (Code x))
-    ) => x -> Product (Choices x)
-  choices x = gchoices $ from x
+  emptyChoices :: Int
+  default emptyChoices :: (GMemRep (SOP I (Code x))) => Int
+  emptyChoices = gemptyChoices @(SOP I (Code x))
 
-  fromMemRep :: Product (Choices x) -> Product (Fields x) -> x
+  fromMemRep :: Finite (Choices x) -> Product (Fields x) -> x
 
   default fromMemRep ::
     ( Generic x
     , (GMemRep (SOP I (Code x)))
-    , Choices x ~ GChoices (SOP I (Code x))
     , Fields x ~ GFields (SOP I (Code x))
-    ) => Product (Choices x) -> Product (Fields x) -> x
+    , Choices x ~ GChoices (SOP I (Code x))
+    ) => Finite (Choices x) -> Product (Fields x) -> x
   fromMemRep cs fs = to $ gfromMemRep cs fs
 
   type Fields x :: [[Type]]
@@ -218,14 +216,6 @@ class MemRep x where
 
   widths :: [Int]
 
-  emptyChoices :: ProductType (Choices x)
-
-  default emptyChoices ::
-    ( GMemRep (SOP I (Code x))
-    , Choices x ~ GChoices (SOP I (Code x))
-    ) => ProductType (Choices x)
-  emptyChoices = gemptyChoices @(SOP I (Code x))
-
   emptyFields :: ProductType (Fields x)
 
   default emptyFields ::
@@ -240,15 +230,16 @@ class MemRep x where
 -----------------------------------------------------------------------
 -- GMemRep, the serf of this file
 class GMemRep x where
-  type GChoices x :: [[Type]]
-  gchoices :: x -> Product (GChoices x)
+  type GChoices x :: Nat
+  gchoices :: x -> Finite (GChoices x)
+
+  gemptyChoices :: Int
 
   type GFields x :: [[Type]]
   gfields :: x -> Product (GFields x)
 
-  gfromMemRep :: Product (GChoices x) -> Product (GFields x) -> x
+  gfromMemRep :: Finite (GChoices x) -> Product (GFields x) -> x
 
-  gemptyChoices :: ProductType (GChoices x)
   gemptyFields :: ProductType (GFields x)
 
 -----------------------------------------------------------------------
@@ -267,10 +258,6 @@ type family Length (xs :: [[Type]]) :: Nat where
 --     go :: forall ys x . Finite x -> NS f ys -> Finite x
 --     go !acc (Z _) = acc
 --     go !acc (S x) = go (acc + 1) x
-
-npMap :: (All MemRep xs) => NP I xs -> NP Product (Eval (Map AppChoices xs))
-npMap SOP.Nil   = SOP.Nil
-npMap (x :* xs) = choices (unI x) :* npMap xs
 
 npFold :: Product ys -> NP Product xs -> Product (Eval (Foldl (++) ys xs))
 npFold acc SOP.Nil   = acc
@@ -300,17 +287,16 @@ instance
     ( All MemRep l
     , All MemRep r
     ) => GMemRep (SOP I '[ l, r]) where
-  type GChoices (SOP I '[ l, r]) =  '[Finite 2] ': Eval (Foldl (ZipWith' (++)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppChoices) '[ l, r])))))
-  gchoices (SOP (Z ls))     = Cons (Pick 0) (zipSumLeft (npFold Nil (npMap ls)) (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC r))))
-  gchoices (SOP (S (Z rs))) = Cons (Pick 1) (zipSumRight (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC l))) (npFold Nil (npMap rs)))
-  gchoices (SOP (S (S _))) = error "this is not even possible"
+  -- type GChoices (SOP I '[ l, r]) =  Choices l + Choices r
+  -- gchoices (SOP (Z ls))     = finite 0
+  -- gchoices (SOP (S (Z rs))) = finite (emptyChoices @l)
+  -- gchoices (SOP (S (S _))) = error "this is not even possible"
 
   type GFields (SOP I '[ l, r]) = Eval (Foldl (ZipWith' (++)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) '[ l, r])))))
   gfields (SOP (Z ls))     = zipSumLeft (npFold Nil (npMapF ls)) (npFoldT PTNil (convertPureFields (pureFields :: NP PF r)))
   gfields (SOP (S (Z rs))) = zipSumRight (npFoldT PTNil (convertPureFields (pureFields :: NP PF l))) (npFold Nil (npMapF rs))
   gfields (SOP (S (S _))) = error "this is not even possible"
 
-  gemptyChoices = PTCons (STSucc 0 STZero) (zipSumT (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC l))) (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC r))))
   gemptyFields = zipSumT (npFoldT PTNil (convertPureFields (pureFields :: NP PF l))) (npFoldT PTNil (convertPureFields (pureFields :: NP PF r)))
 
 
@@ -320,10 +306,10 @@ instance
     , All MemRep y
     , All MemRep z
     ) => GMemRep (SOP I '[ x, y, z]) where
-  type GChoices (SOP I '[ x, y, z]) = '[Finite 3] ': Eval (Foldl (ZipWith' (++)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppChoices) '[ x, y, z])))))
-  gchoices (SOP (Z xs))         = Cons (Pick 0) (zipSumLeft (zipSumLeft (npFold Nil (npMap xs)) (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC y)))) (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC z))))
-  gchoices (SOP (S (Z ys)))     = Cons (Pick 1) (zipSumLeft (zipSumRight (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC x))) (npFold Nil (npMap ys))) (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC z))))
-  gchoices (SOP (S (S (Z zs)))) = Cons (Pick 2) (zipSumRight (zipSumT (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC x))) (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC y)))) (npFold Nil (npMap zs)))
+  -- type GChoices (SOP I '[ x, y, z]) = Choices x + Choices y + Choices z
+  -- gchoices (SOP (Z xs))         = finite 0
+  -- gchoices (SOP (S (Z ys)))     = emptyChoices @x
+  -- gchoices (SOP (S (S (Z zs)))) = emptyChoices @x + emptyChoices @y
   -- TODO proof that this is not possible
   gchoices (SOP (S (S (S _)))) = error "this is not even possible"
 
@@ -355,15 +341,13 @@ type instance Eval (Foldl f y (x ': xs)) = Eval (Foldl f (Eval (f y x)) xs)
 
 -- generic instance for unary sums (tuples)
 instance (All MemRep as) => GMemRep (SOP I '[as]) where
-  type GChoices (SOP I '[as]) = Eval (Foldl (++) '[] (Eval (Map AppChoices as)))
-  gchoices (SOP (Z xs)) = npFold Nil (npMap xs)
-  gchoices (SOP (S _)) = error "this is not even possible"
+  -- type GChoices (SOP I '[as]) = Eval (Foldl 1 (*) (Eval (Map AppChoices as)))
+  -- gchoices _ = finite 0
 
   type GFields (SOP I '[as]) = Eval (Foldl (++) '[] (Eval (Map AppFields as)))
   gfields (SOP (Z xs)) = npFold Nil (npMapF xs)
   gfields (SOP (S _)) = error "this is not even possible"
 
-  gemptyChoices = npFoldT PTNil (convertPureChoices (pureChoices :: NP PC as))
   gemptyFields = npFoldT PTNil (convertPureFields (pureFields :: NP PF as))
 
   gfromMemRep cs fs = undefined -- SOP (Z $ generate cs fs (pureChoices :: NP PC as) (pureFields :: NP PF as))
@@ -453,26 +437,6 @@ splitSum3 as        STZero        ys zs  = (Undef, ys', zs')
 splitSum3 (Skip as) (STSucc _ xs) ys zs = (Skip xs', ys', zs')
   where
     (xs', ys', zs') = splitSum3 as xs ys zs
-
-
--- foldPop :: NP PC xss -> Product (Eval (Foldl (++) '[] (Eval (Map AppChoices yss))))
--- foldPop x = npFold Nil (npMap xinner)
-
--- functions to generate pure Choices and Fields
-newtype PC a = PC (ProductType (Choices a))
-
-unPC :: PC a -> ProductType (Choices a)
-unPC (PC x) = x
-
-convertPureChoices :: NP PC xs -> NP ProductType (Eval (Map AppChoices xs))
-convertPureChoices SOP.Nil   = SOP.Nil
-convertPureChoices (x :* xs) = unPC x :* convertPureChoices xs
-
-pureChoices :: (All MemRep xs) => NP PC xs
-pureChoices = cpure_NP (Proxy :: Proxy MemRep) emptyChoices'
-
-emptyChoices' :: forall x . (MemRep x) => PC x
-emptyChoices' = PC $ emptyChoices @x
 
 newtype PF a = PF (ProductType (Fields a))
 
