@@ -166,7 +166,18 @@ takeLeft (Skip ls) rs = Skip (takeLeft ls rs)
 takeLeft Undef     rs = makeEmpty rs
 
 takeRight :: SumType l -> Sum r -> Sum (Eval (l ++ r))
-takeRight = undefined
+takeRight (STSucc _ ls) rs = Skip (takeRight ls rs)
+takeRight STZero        rs = rs
+
+  -- data SumType :: [Type] -> Type where
+  --   STSucc :: x -> SumType xs -> SumType (x ': xs)
+  --   STZero :: SumType '[]
+  
+  -- data Sum :: [Type] -> Type where
+  --   Pick :: x -> Sum (x ': xs)
+  --   Skip :: Sum xs -> Sum (x ': xs)
+  --   Undef :: Sum '[]
+  
 
 -----------------------------------------------------------------------
 -- MemRep, the king of this file
