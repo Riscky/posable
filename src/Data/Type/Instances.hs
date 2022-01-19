@@ -222,7 +222,7 @@ instance (MemRep x, MemRep y) => MemRep (x, y) where
 -- Instance for 3-tuples
 instance (MemRep x, MemRep y, MemRep z) => MemRep (x, y, z) where
   type Choices (x, y, z) = Choices x * Choices y * Choices z
-  choices (x, y, z) = undefined -- (choices x * emptyChoices @y * emptyChoices @z) + (choices y * emptyChoices @z) + choices z
+  choices (x, y, z) = combineProduct (combineProduct (choices x, choices y),choices z)
 
   type Fields (x, y, z) = Eval (Eval (Fields x ++ Fields y) ++ Fields z)
   fields (x, y, z) = rvconcat (rvconcat (fields x) (fields y)) (fields z)
@@ -231,7 +231,9 @@ instance (MemRep x, MemRep y, MemRep z) => MemRep (x, y, z) where
 
   emptyFields = rvconcatT (rvconcatT (emptyFields @x) (emptyFields @y)) (emptyFields @z)
 
-  fromMemRep cs fs = undefined --(fromMemRep xcs xfs, fromMemRep ycs yfs, fromMemRep zcs zfs)
-  --                  where
-  --                   (PSCons xfs (PSCons yfs (PSCons zfs PSNil))) = splits fs $ PSTCons (emptyFields @x)  $ PSTCons (emptyFields @y)  $ PSTCons (emptyFields @z)  PSTNil
+  fromMemRep cs fs = (fromMemRep xcs xfs, fromMemRep ycs yfs, fromMemRep zcs zfs)
+                   where
+                    (xcs, ycs)  = separateProduct xycs
+                    (xycs, zcs) = separateProduct cs
+                    (PSCons xfs (PSCons yfs (PSCons zfs PSNil))) = splits fs $ PSTCons (emptyFields @x)  $ PSTCons (emptyFields @y)  $ PSTCons (emptyFields @z)  PSTNil
 
