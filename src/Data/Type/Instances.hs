@@ -25,8 +25,9 @@ import Data.Int (Int8, Int16)
 import qualified Generics.SOP as SOP
 import Fcf (Eval, type (++))
 import Data.Type.MemRep
-import Data.Finite (finite)
-import GHC.TypeNats (type (+))
+import Data.Finite (finite, add, multiply, combineProduct, combineSum)
+import GHC.TypeNats (type (+), type (*))
+import Unsafe.Coerce (unsafeCoerce)
 
 
 -----------------------------------------------------------------------
@@ -89,7 +90,8 @@ instance MemRep Int where
 
   widths = [32]
 
-  emptyChoices = 0
+  emptyChoices = 1 -- note that this should be equal to Choices Int, but on the value level
+  -- we might want to enforce this somehow (TODO)
 
   emptyFields = PTCons (STSucc 0 STZero) PTNil
 
@@ -105,7 +107,7 @@ instance MemRep Float where
 
   widths = [32]
 
-  emptyChoices = 0
+  emptyChoices = 1
   emptyFields = PTCons (STSucc 0 STZero) PTNil
 
 instance MemRep Int8 where
@@ -120,7 +122,7 @@ instance MemRep Int8 where
 
   widths = [8]
 
-  emptyChoices = 0
+  emptyChoices = 1
   emptyFields = PTCons (STSucc 0 STZero) PTNil
 
 instance MemRep Int16 where
@@ -135,15 +137,15 @@ instance MemRep Int16 where
 
   widths = [16]
 
-  emptyChoices = 0
+  emptyChoices = 1
   emptyFields = PTCons (STSucc 0 STZero) PTNil
 
 
 -- Instance for Either, recursively defined
 instance (MemRep l, MemRep r) => MemRep (Either l r) where
   type Choices (Either l r) = Choices l + Choices r
-  choices (Left _)  = 0
-  choices (Right _) = finite (emptyChoices @l)
+  choices (Left lv)  = combineSum (Left (choices lv))
+  choices (Right rv) = combineSum (Right (choices rv))
 
   type Fields (Either l r) = Eval (ZipWith' (++) (Fields l) (Fields r))
   fields (Left lv)  = zipSumLeft (fields lv) (emptyFields @r)
@@ -195,8 +197,8 @@ instance (MemRep n, MemRep e, MemRep s) => MemRep (Direction n e s) where
 
 -- Instance for product types (tuples)
 instance (MemRep x, MemRep y) => MemRep (x, y) where
-  -- type Choices (x,y) = Eval (Choices x ++ Choices y)
-  -- choices (x,y) = rvconcat (choices x) (choices y)
+  type Choices (x,y) = Choices x * Choices y
+  choices (x,y) = combineProduct (choices x, choices y)
 
   type Fields (x, y) = Eval (Fields x ++ Fields y)
   fields (x,y) = rvconcat (fields x) (fields y)
@@ -205,14 +207,15 @@ instance (MemRep x, MemRep y) => MemRep (x, y) where
 
   emptyFields = rvconcatT (emptyFields @x) (emptyFields @y)
 
+  fromMemRep cs fs = undefined --
   -- fromMemRep cs fs = (fromMemRep xcs xfs, fromMemRep ycs yfs)
   --                  where
   --                    (xfs, yfs) = split fs (emptyFields @x) (emptyFields @y)
 
 -- Instance for 3-tuples
 instance (MemRep x, MemRep y, MemRep z) => MemRep (x, y, z) where
-  -- type Choices (x, y, z) = Eval (Eval (Choices x ++ Choices y) ++ Choices z)
-  -- choices (x, y, z) = rvconcat (rvconcat (choices x) (choices y)) (choices z)
+  type Choices (x, y, z) = Choices x * Choices y * Choices z
+  choices (x, y, z) = undefined -- (choices x * emptyChoices @y * emptyChoices @z) + (choices y * emptyChoices @z) + choices z
 
   type Fields (x, y, z) = Eval (Eval (Fields x ++ Fields y) ++ Fields z)
   fields (x, y, z) = rvconcat (rvconcat (fields x) (fields y)) (fields z)
@@ -221,7 +224,7 @@ instance (MemRep x, MemRep y, MemRep z) => MemRep (x, y, z) where
 
   emptyFields = rvconcatT (rvconcatT (emptyFields @x) (emptyFields @y)) (emptyFields @z)
 
-  -- fromMemRep cs fs = (fromMemRep xcs xfs, fromMemRep ycs yfs, fromMemRep zcs zfs)
+  fromMemRep cs fs = undefined --(fromMemRep xcs xfs, fromMemRep ycs yfs, fromMemRep zcs zfs)
   --                  where
   --                   (PSCons xfs (PSCons yfs (PSCons zfs PSNil))) = splits fs $ PSTCons (emptyFields @x)  $ PSTCons (emptyFields @y)  $ PSTCons (emptyFields @z)  PSTNil
 
