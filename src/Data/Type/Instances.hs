@@ -28,7 +28,6 @@ import qualified Generics.SOP as SOP
 import Fcf (Eval, type (++))
 import Data.Type.MemRep
 import Data.Finite (
-  finite,
   combineProduct,
   combineSum,
   separateProduct
@@ -97,9 +96,6 @@ instance MemRep Int where
 
   widths = [32]
 
-  emptyChoices = 1 -- note that this should be equal to Choices Int, but on the value level
-  -- we might want to enforce this somehow (TODO)
-
   emptyFields = PTCons (STSucc 0 STZero) PTNil
 
 instance MemRep Float where
@@ -114,7 +110,6 @@ instance MemRep Float where
 
   widths = [32]
 
-  emptyChoices = 1
   emptyFields = PTCons (STSucc 0 STZero) PTNil
 
 instance MemRep Int8 where
@@ -129,7 +124,6 @@ instance MemRep Int8 where
 
   widths = [8]
 
-  emptyChoices = 1
   emptyFields = PTCons (STSucc 0 STZero) PTNil
 
 instance MemRep Int16 where
@@ -144,7 +138,6 @@ instance MemRep Int16 where
 
   widths = [16]
 
-  emptyChoices = 1
   emptyFields = PTCons (STSucc 0 STZero) PTNil
 
 
@@ -153,8 +146,6 @@ instance (MemRep l, MemRep r) => MemRep (Either l r) where
   type Choices (Either l r) = Choices l + Choices r
   choices (Left lv)  = combineSum (Left (choices lv))
   choices (Right rv) = combineSum (Right (choices rv))
-
-  emptyChoices = emptyChoices @l + emptyChoices @r
 
   type Fields (Either l r) = Eval (ZipWith' (++) (Fields l) (Fields r))
   fields (Left lv)  = zipSumLeft (fields lv) (emptyFields @r)
@@ -175,10 +166,19 @@ instance (MemRep l, MemRep r) => MemRep (Either l r) where
 
 -- Instance for Direction, recursively defined
 instance (MemRep n, MemRep e, MemRep s) => MemRep (Direction n e s) where
-  type Choices (Direction n e s) = Choices n + Choices e + Choices s
-  choices (North _) = 0
-  choices (East  _) = finite (emptyChoices @n)
-  choices (South _) = finite (emptyChoices @n + emptyChoices @e)
+  type Choices (Direction n e s) = (Choices n + Choices e) + Choices s
+  choices (North nv) = combineSum (Left es)
+    where
+      es :: Finite (Choices n + Choices e)
+      es = combineSum (Left (choices nv))
+  choices (East  ev) = combineSum (Left es)
+    where
+      es :: Finite (Choices n + Choices e)
+      es = combineSum (Right (choices ev))
+  choices (South sv) = combineSum (Right (choices sv))
+
+  -- choices (Left lv)  = combineSum (Left (choices lv))
+  -- choices (Right rv) = combineSum (Right (choices rv))
 
   type Fields (Direction n e s) =  Eval (Foldl (ZipWith' (++)) '[] '[ Fields n, Fields e, Fields s])
   fields (North nv) = zipSumLeft  (zipSumLeft  (fields nv) (emptyFields @e)) (emptyFields @s)
@@ -198,7 +198,6 @@ instance (MemRep n, MemRep e, MemRep s) => MemRep (Direction n e s) where
         Right x   -> Right x
       (nfs, efs, sfs) = splitHorizontal3 fs (emptyFields @n) (emptyFields @e) (emptyFields @s)
   
-  emptyChoices = 3 -- should be equal to Choices x
   emptyFields = zipSumT (zipSumT (emptyFields @n) (emptyFields @e)) (emptyFields @s)
 
 -- Instance for product types (tuples)

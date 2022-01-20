@@ -48,6 +48,9 @@ import GHC.TypeLits (KnownNat)
 
 import Unsafe.Coerce (unsafeCoerce)
 
+import GHC.TypeNats (natVal)
+import GHC.Natural (naturalToInteger)
+
 -----------------------------------------------------------------------
 -- Heterogeneous lists with explicit types
 data ProductType :: [[Type]] -> Type where
@@ -195,8 +198,7 @@ class (KnownNat (Choices x)) => MemRep x where
   choices x = gchoices $ from x
 
   emptyChoices :: Integer
-  default emptyChoices :: (GMemRep (SOP I (Code x))) => Integer
-  emptyChoices = gemptyChoices @(SOP I (Code x))
+  emptyChoices = naturalToInteger $ natVal (SOP.Proxy @(Choices x))
 
   fromMemRep :: Finite (Choices x) -> Product (Fields x) -> x
 
@@ -238,8 +240,6 @@ class (KnownNat (Choices x)) => MemRep x where
 class (KnownNat (GChoices x)) =>  GMemRep x where
   type GChoices x :: Nat
   gchoices :: x -> Finite (GChoices x)
-
-  gemptyChoices :: Integer
 
   type GFields x :: [[Type]]
   gfields :: x -> Product (GFields x)
@@ -285,7 +285,6 @@ npMapF (x :* xs) = fields (unI x) :* npMapF xs
 --   type GFields (SOP I (a ': b ': cs)) = Eval (Foldl (ZipWith' (<>)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) (a ': b ': cs))))))
 --   gfields (SOP xs) = undefined
 
---   gemptyChoices = undefined
 --   gemptyFields = undefined
 
 -- generic instance for binary sums
@@ -294,9 +293,6 @@ instance
     , All MemRep r
     ) => GMemRep (SOP I '[ l, r]) where
   type GChoices (SOP I '[ l, r]) = 0 -- TODO Choices l + Choices r
-  -- gchoices (SOP (Z ls))     = finite 0
-  -- gchoices (SOP (S (Z rs))) = finite (emptyChoices @l)
-  -- gchoices (SOP (S (S _))) = error "this is not even possible"
 
   type GFields (SOP I '[ l, r]) = Eval (Foldl (ZipWith' (++)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) '[ l, r])))))
   gfields (SOP (Z ls))     = zipSumLeft (npFold Nil (npMapF ls)) (npFoldT PTNil (convertPureFields (pureFields :: NP PF r)))
@@ -313,10 +309,6 @@ instance
     , All MemRep z
     ) => GMemRep (SOP I '[ x, y, z]) where
   type GChoices (SOP I '[ x, y, z]) = 0 -- TODO
-  -- gchoices (SOP (Z xs))         = finite 0
-  -- gchoices (SOP (S (Z ys)))     = emptyChoices @x
-  -- gchoices (SOP (S (S (Z zs)))) = emptyChoices @x + emptyChoices @y
-  -- TODO proof that this is not possible
   gchoices (SOP (S (S (S _)))) = error "this is not even possible"
 
   type GFields (SOP I '[ x, y, z]) = Eval (Foldl (ZipWith' (++)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) '[ x, y, z])))))
@@ -325,7 +317,6 @@ instance
   gfields (SOP (S (S (Z zs)))) = zipSumRight (zipSumT (npFoldT PTNil (convertPureFields (pureFields :: NP PF x))) (npFoldT PTNil (convertPureFields (pureFields :: NP PF y)))) (npFold Nil (npMapF zs))
   gfields (SOP (S (S (S _))))  = error "this is not even possible"
 
-  -- gemptyChoices = Cons (Skip Empty) (zipSumT (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC l))) (npFoldT PTNil (convertPureChoices (pureChoices :: NP PC r))))
   -- gemptyFields = zipSumT (npFoldT PTNil (convertPureFields (pureFields :: NP PF l))) (npFoldT PTNil (convertPureFields (pureFields :: NP PF r)))
 
 
