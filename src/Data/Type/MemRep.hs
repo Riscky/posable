@@ -14,6 +14,7 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE NoStarIsType #-}
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 
 module Data.Type.MemRep where
 
@@ -289,10 +290,11 @@ npMapF (x :* xs) = fields (unI x) :* npMapF xs
 
 -- generic instance for binary sums
 instance
-    ( All MemRep l
+    ( KnownNat (GChoices (SOP I '[ l, r]))
+    , All MemRep l
     , All MemRep r
     ) => GMemRep (SOP I '[ l, r]) where
-  type GChoices (SOP I '[ l, r]) = 0 -- TODO Choices l + Choices r
+  type GChoices (SOP I '[ l, r]) = Eval (Eval (Foldl (+) 0 (Eval (Map AppChoices l))) + Eval (Foldl (+) 0 (Eval (Map AppChoices r))))
 
   type GFields (SOP I '[ l, r]) = Eval (Foldl (ZipWith' (++)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) '[ l, r])))))
   gfields (SOP (Z ls))     = zipSumLeft (npFold Nil (npMapF ls)) (npFoldT PTNil (convertPureFields (pureFields :: NP PF r)))

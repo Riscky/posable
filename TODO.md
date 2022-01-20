@@ -11,4 +11,4 @@ List of things that should or could be done:
 - Remove Nix stuff and use Stack (hard to get things linked locally otherwise)
 - Convert back to original representation
 - Square the fields representation
-- Make choices a tree
+- Remove emptyChoices since it is unneeded
