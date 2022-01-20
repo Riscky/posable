@@ -44,7 +44,7 @@ import Data.Kind (Type)
 import Generics.SOP.NP (cpure_NP)
 
 import GHC.Base (Nat)
-import GHC.TypeLits (type (*), natVal, KnownNat)
+import GHC.TypeLits (KnownNat)
 
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -346,9 +346,12 @@ type instance Eval (Foldl f y '[]) = y
 type instance Eval (Foldl f y (x ': xs)) = Eval (Foldl f (Eval (f y x)) xs)
 
 -- generic instance for unary sums (tuples)
-instance (All MemRep as) => GMemRep (SOP I '[as]) where
-  type GChoices (SOP I '[as]) = 1
-  -- gchoices _ = finite 0
+instance (
+    (KnownNat (Eval (Foldl (+) 0 (Eval (Map AppChoices as))))
+  , All MemRep as)
+  ) => GMemRep (SOP I '[as]) where
+  type GChoices (SOP I '[as]) = Eval (Foldl (+) 0 (Eval (Map AppChoices as)))
+  gchoices _ = undefined
 
   type GFields (SOP I '[as]) = Eval (Foldl (++) '[] (Eval (Map AppFields as)))
   gfields (SOP (Z xs)) = npFold Nil (npMapF xs)

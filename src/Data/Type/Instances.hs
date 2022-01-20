@@ -18,6 +18,8 @@
 {-# OPTIONS_GHC -Wno-missing-methods #-}
 {-# LANGUAGE NoStarIsType #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
+-- This is needed to derive MemRep for tuples of size more then 4
+{-# OPTIONS_GHC -fconstraint-solver-iterations=5 #-}
 
 module Data.Type.Instances where
 import qualified GHC.Generics as GHC
@@ -33,7 +35,6 @@ import Data.Finite (
   , separateSum, Finite
   )
 import GHC.TypeNats (type (+), type (*))
-
 
 -----------------------------------------------------------------------
 -- Instances for common Haskell datatypes
