@@ -27,15 +27,12 @@ import Fcf (Eval, type (++))
 import Data.Type.MemRep
 import Data.Finite (
   finite,
-  add,
-  multiply,
   combineProduct,
   combineSum,
   separateProduct
-  , separateSum
+  , separateSum, Finite
   )
 import GHC.TypeNats (type (+), type (*))
-import Unsafe.Coerce (unsafeCoerce)
 
 
 -----------------------------------------------------------------------
@@ -68,6 +65,7 @@ data MultiSum x y = First x y
 data Direction n e s = North n
                      | East e
                      | South s
+                     deriving (Show)
                     --  deriving (GHC.Generic, SOP.Generic, MemRep)
 
 
@@ -167,8 +165,9 @@ instance (MemRep l, MemRep r) => MemRep (Either l r) where
       Left lcs -> Left (fromMemRep lcs lfs)
       Right rcs -> Right (fromMemRep rcs rfs)
     where
-      cs' = separateSum (unsafeCoerce cs) -- Not sure if safe
-      (lfs,rfs) = splitHorizontal fs (emptyFields @l)  (emptyFields @r)
+      cs' :: Either (Finite (Choices l)) (Finite (Choices r))
+      cs' = separateSum cs
+      (lfs,rfs) = splitHorizontal fs (emptyFields @l) (emptyFields @r)
 
   emptyFields = zipSumT (emptyFields @l) (emptyFields @r)
 
@@ -185,19 +184,18 @@ instance (MemRep n, MemRep e, MemRep s) => MemRep (Direction n e s) where
   fields (East  ev) = zipSumLeft  (zipSumRight (emptyFields @n) (fields ev)) (emptyFields @s)
   fields (South sv) = zipSumRight (zipSumT     (emptyFields @n) (emptyFields @e)) (fields sv)
 
-  fromMemRep = undefined
-  --   where
-  --     (ncs, _, _) = splitHorizontal3 cs (emptyChoices @n) (emptyChoices @e) (emptyChoices @s)
-  --     (nfs, _, _) = splitHorizontal3 fs (emptyFields @n) (emptyFields @e) (emptyFields @s)
-  -- fromMemRep (Cons (Pick 1) cs) fs = East (fromMemRep ecs efs)
-  --   where
-  --     (_, ecs, _) = splitHorizontal3 cs (emptyChoices @n) (emptyChoices @e) (emptyChoices @s)
-  --     (_, efs, _) = splitHorizontal3 fs (emptyFields @n) (emptyFields @e) (emptyFields @s)
-  -- fromMemRep (Cons (Pick 3) cs) fs = South (fromMemRep scs sfs)
-  --   where
-  --     (_, _, scs) = splitHorizontal3 cs (emptyChoices @n) (emptyChoices @e) (emptyChoices @s)
-  --     (_, _, sfs) = splitHorizontal3 fs (emptyFields @n) (emptyFields @e) (emptyFields @s)
-  -- fromMemRep _                  _  = error "constructor index out of bounds"
+  fromMemRep cs fs = case cs'' of
+      Left (Left ncs)  -> North (fromMemRep ncs nfs)
+      Left (Right ecs) -> East  (fromMemRep ecs efs)
+      Right scs        -> South (fromMemRep scs sfs)
+    where
+      cs' :: Either (Finite (Choices n + Choices e)) (Finite (Choices s))
+      cs' = separateSum cs
+      cs'' :: Either (Either (Finite (Choices n)) (Finite (Choices e))) (Finite (Choices s))
+      cs'' = case cs' of
+        Left necs -> Left (separateSum necs)
+        Right x   -> Right x
+      (nfs, efs, sfs) = splitHorizontal3 fs (emptyFields @n) (emptyFields @e) (emptyFields @s)
   
   emptyChoices = 3 -- should be equal to Choices x
   emptyFields = zipSumT (zipSumT (emptyFields @n) (emptyFields @e)) (emptyFields @s)
