@@ -282,9 +282,34 @@ instance
     ( All MemRep x
     , All MemRep y
     , All MemRep z
+    , (KnownNat (NatProduct (MapChoices x)))
+    , (KnownNat (NatProduct (MapChoices y)))
+    , (KnownNat (NatProduct (MapChoices z)))
+    , (All KnownNat (MapChoices x))
+    , (All KnownNat (MapChoices y))
+    , (All KnownNat (MapChoices z))
     ) => GMemRep (SOP I '[ x, y, z]) where
-  type GChoices (SOP I '[ x, y, z]) = 0 -- TODO
-  gchoices (SOP (S (S (S _)))) = error "this is not even possible"
+  type GChoices (SOP I '[ x, y, z]) = (NatProduct (MapChoices x) + NatProduct (MapChoices y)) + NatProduct (MapChoices z)
+  gchoices (SOP (Z xs)) = combineSum $ Left xs'
+    where
+      xs' :: Finite (NatProduct (MapChoices x) + NatProduct (MapChoices y))
+      xs' = combineSum (Left (combineProducts (npMapC xs)))
+  gchoices (SOP (S (Z xs))) = combineSum (Left xs')
+    where
+      xs' :: Finite (NatProduct (MapChoices x) + NatProduct (MapChoices y))
+      xs' = combineSum (Right (combineProducts (npMapC xs)))
+  gchoices (SOP (S (S (Z xs)))) = combineSum (Right (combineProducts (npMapC xs)))
+  gchoices _ = error "rare situ"
+
+  -- choices (North nv) = combineSum (Left es)
+  --   where
+  --     es :: Finite (Choices n + Choices e)
+  --     es = combineSum (Left (choices nv))
+  -- choices (East  ev) = combineSum (Left es)
+  --   where
+  --     es :: Finite (Choices n + Choices e)
+  --     es = combineSum (Right (choices ev))
+  -- choices (South sv) = combineSum (Right (choices sv))
 
   type GFields (SOP I '[ x, y, z]) = Eval (Foldl (ZipWith' (++)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) '[ x, y, z])))))
   gfields (SOP (Z xs))         = zipSumLeft (zipSumLeft (npFold Nil (npMapF xs)) (npFoldT PTNil (convertPureFields (pureFields :: NP PF y)))) (npFoldT PTNil (convertPureFields (pureFields :: NP PF z)))
