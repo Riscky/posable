@@ -21,16 +21,16 @@ module Data.Type.MemRep where
 
 import Generics.SOP hiding (Nil)
 import Generics.SOP.NP hiding (Nil)
-import Data.Finite (Finite, combineProduct)
+import Data.Finite (Finite, combineProduct, combineSum)
 
-import Fcf ( Eval, Exp, type (++), Map, type (+))
+import Fcf ( Eval, Exp, type (++), Map)
 
 import qualified Generics.SOP as SOP
 
 import Data.Kind (Type)
 
 import GHC.Base (Nat)
-import GHC.TypeLits (KnownNat, type (*), natVal)
+import GHC.TypeLits (KnownNat, type (*), natVal, type (+))
 
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -227,7 +227,7 @@ class (KnownNat (GChoices x)) =>  GMemRep x where
 -- adapted Length to lists of lists (sums of products)
 type family Length (xs :: [[Type]]) :: Nat where
   Length '[] = 0
-  Length (x ': xs) = Eval (1 + Length xs)
+  Length (x ': xs) = 1 + Length xs
 
 -- typesafe version of index_NS, implementation doesn't compile yet
 -- stolen from https://hackage.haskell.org/package/sop-core-0.5.0.1/docs/src/Data.SOP.Classes.html#hindex
@@ -250,13 +250,24 @@ npMapF :: (All MemRep xs) => NP I xs -> NP Product (Eval (Map AppFields xs))
 npMapF SOP.Nil   = SOP.Nil
 npMapF (x :* xs) = fields (unI x) :* npMapF xs
 
+combineProducts :: (All KnownNat xs) => NP Finite xs -> Finite (NatProduct xs)
+combineProducts SOP.Nil = 0
+combineProducts (y :* ys) = combineProduct (y, combineProducts ys)
+
 -- generic instance for binary sums
 instance
     ( KnownNat (GChoices (SOP I '[ l, r]))
+    , (KnownNat (NatProduct (MapChoices l)))
+    , (All KnownNat (MapChoices l))
+    , (All KnownNat (MapChoices r))
     , All MemRep l
     , All MemRep r
     ) => GMemRep (SOP I '[ l, r]) where
-  type GChoices (SOP I '[ l, r]) = Eval (Eval (Foldl (+) 0 (Eval (Map AppChoices l))) + Eval (Foldl (+) 0 (Eval (Map AppChoices r))))
+  type GChoices (SOP I '[ l, r]) = NatProduct (MapChoices l) + NatProduct (MapChoices r)
+  gchoices (SOP (Z xs)) = combineSum $ Left (combineProducts (npMapC xs))
+  gchoices (SOP (S (Z xs))) = combineSum $ Right (combineProducts $ npMapC xs)
+  gchoices _ = error "rare situ"
+
 
   type GFields (SOP I '[ l, r]) = Eval (Foldl (ZipWith' (++)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) '[ l, r])))))
   gfields (SOP (Z ls))     = zipSumLeft (npFold Nil (npMapF ls)) (npFoldT PTNil (convertPureFields (pureFields :: NP PF r)))
@@ -319,11 +330,7 @@ instance (
   , All MemRep as
   ) => GMemRep (SOP I '[as]) where
   type GChoices (SOP I '[as]) = NatProduct (MapChoices as)
-  gchoices (SOP (Z xs)) = g (npMapC xs)
-    where
-      g :: (All KnownNat xs) => NP Finite xs -> Finite (NatProduct xs)
-      g SOP.Nil = 0
-      g (y :* ys) = combineProduct (y, g ys)
+  gchoices (SOP (Z xs)) = combineProducts (npMapC xs)
   gchoices (SOP _) = error "rare situ"
 
   type GFields (SOP I '[as]) = Eval (Foldl (++) '[] (Eval (Map AppFields as)))
