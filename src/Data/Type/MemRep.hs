@@ -15,42 +15,24 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE NoStarIsType #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 module Data.Type.MemRep where
 
-import Generics.SOP
-    ( All,
-      All2,
-      Code,
-      Generic,
-      All,
-      All2,
-      Code,
-      Generic,
-      I,
-      SOP(SOP),
-      NS(Z, S),
-      NP((:*)),
-      from,
-      unI,
-      Proxy(Proxy),
-      to )
-import Data.Finite (Finite, finite)
+import Generics.SOP hiding (Nil)
+import Generics.SOP.NP hiding (Nil)
+import Data.Finite (Finite, combineProduct)
 
 import Fcf ( Eval, Exp, type (++), Map, type (+))
 
 import qualified Generics.SOP as SOP
 
 import Data.Kind (Type)
-import Generics.SOP.NP (cpure_NP)
 
 import GHC.Base (Nat)
-import GHC.TypeLits (KnownNat)
+import GHC.TypeLits (KnownNat, type (*), natVal)
 
 import Unsafe.Coerce (unsafeCoerce)
-
-import GHC.TypeNats (natVal)
-import GHC.Natural (naturalToInteger)
 
 -----------------------------------------------------------------------
 -- Heterogeneous lists with explicit types
@@ -174,16 +156,6 @@ takeRight :: SumType l -> Sum r -> Sum (Eval (l ++ r))
 takeRight (STSucc _ ls) rs = Skip (takeRight ls rs)
 takeRight STZero        rs = rs
 
-  -- data SumType :: [Type] -> Type where
-  --   STSucc :: x -> SumType xs -> SumType (x ': xs)
-  --   STZero :: SumType '[]
-  
-  -- data Sum :: [Type] -> Type where
-  --   Pick :: x -> Sum (x ': xs)
-  --   Skip :: Sum xs -> Sum (x ': xs)
-  --   Undef :: Sum '[]
-  
-
 -----------------------------------------------------------------------
 -- MemRep, the king of this file
 class (KnownNat (Choices x)) => MemRep x where
@@ -199,7 +171,7 @@ class (KnownNat (Choices x)) => MemRep x where
   choices x = gchoices $ from x
 
   emptyChoices :: Integer
-  emptyChoices = naturalToInteger $ natVal (SOP.Proxy @(Choices x))
+  emptyChoices = natVal (SOP.Proxy @(Choices x))
 
   fromMemRep :: Finite (Choices x) -> Product (Fields x) -> x
 
@@ -278,16 +250,6 @@ npMapF :: (All MemRep xs) => NP I xs -> NP Product (Eval (Map AppFields xs))
 npMapF SOP.Nil   = SOP.Nil
 npMapF (x :* xs) = fields (unI x) :* npMapF xs
 
--- generic instance for sums, incompete implementation
--- instance (All MemRep a, All MemRep b, All2 MemRep cs) => GMemRep (SOP I (a ': b ': cs)) where
---   type GChoices (SOP I (a ': b ': cs)) =  Sum '[Finite (Length (a ': b ': cs))] ': Eval (Foldl (ZipWith' (<>)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppChoices) (a ': b ': cs))))))
---   gchoices (SOP xs) = Cons (Pick (finite $ toInteger $ index_NS xs) Zero) undefined
-
---   type GFields (SOP I (a ': b ': cs)) = Eval (Foldl (ZipWith' (<>)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) (a ': b ': cs))))))
---   gfields (SOP xs) = undefined
-
---   gemptyFields = undefined
-
 -- generic instance for binary sums
 instance
     ( KnownNat (GChoices (SOP I '[ l, r]))
@@ -338,13 +300,31 @@ data Foldl :: (a -> b -> Exp b) -> b -> t a -> Exp b
 type instance Eval (Foldl f y '[]) = y
 type instance Eval (Foldl f y (x ': xs)) = Eval (Foldl f (Eval (f y x)) xs)
 
+type family MapChoices (xs :: f x) :: f Nat where
+  MapChoices '[] = '[]
+  MapChoices (x ': xs) = Choices x ': MapChoices xs
+
+npMapC :: forall xs . (All MemRep xs) => NP I xs -> NP Finite (MapChoices xs)
+npMapC SOP.Nil   = SOP.Nil
+npMapC (x :* xs) = choices (unI x) :* npMapC xs
+
+type family NatProduct (xs :: f Nat) :: Nat where
+  NatProduct '[] = 1
+  NatProduct (x ': xs) = x GHC.TypeLits.* NatProduct xs
+
 -- generic instance for unary sums (tuples)
 instance (
-    (KnownNat (Eval (Foldl (+) 0 (Eval (Map AppChoices as))))
-  , All MemRep as)
+    (All KnownNat (MapChoices as))
+  , (KnownNat (NatProduct (MapChoices as)))
+  , All MemRep as
   ) => GMemRep (SOP I '[as]) where
-  type GChoices (SOP I '[as]) = Eval (Foldl (+) 0 (Eval (Map AppChoices as)))
-  gchoices _ = undefined
+  type GChoices (SOP I '[as]) = NatProduct (MapChoices as)
+  gchoices (SOP (Z xs)) = g (npMapC xs)
+    where
+      g :: (All KnownNat xs) => NP Finite xs -> Finite (NatProduct xs)
+      g SOP.Nil = 0
+      g (y :* ys) = combineProduct (y, g ys)
+  gchoices (SOP _) = error "rare situ"
 
   type GFields (SOP I '[as]) = Eval (Foldl (++) '[] (Eval (Map AppFields as)))
   gfields (SOP (Z xs)) = npFold Nil (npMapF xs)
@@ -354,18 +334,6 @@ instance (
 
   gfromMemRep cs fs = undefined -- SOP (Z $ generate cs fs (pureChoices :: NP PC as) (pureFields :: NP PF as))
 
--- convertC :: Product (Eval (Foldl (++) (Choices x) (Eval (Map AppChoices xs)))) -> Product (Choices x FcfM.<> Eval (Foldl (++) '[] (Eval (Map AppChoices xs))))
--- convertC x = undefined
-
--- convertF :: Product (Eval (Foldl (++) (Fields x) (Eval (Map AppFields xs)))) -> Product (Fields x FcfM.<> Eval (Foldl (++) '[] (Eval (Map AppFields xs))))
--- convertF x = undefined
-
--- generate :: (All MemRep as) => Product (Eval (Foldl (++) '[] (Eval (Map AppChoices as)))) -> Product (Eval (Foldl (++) '[] (Eval (Map AppFields as)))) -> NP PC as -> NP PF as -> NP I as
--- generate _  _ SOP.Nil   SOP.Nil    = SOP.Nil
--- generate cs fs (x :* xs) (y :* ys) = SOP.I (fromMemRep xc xf) :* generate xcs xfs xs ys
---                                     where
---                                       (xc, xcs) = split (undefined cs) (unPC x) (npFold PTNil (convertPureChoices xs))
---                                       (xf, xfs) = split (undefined fs) (unPF y) (npFold PTNil (convertPureFields ys))
 
 split :: Product (Eval (l ++ r)) -> ProductType l -> ProductType r -> (Product l, Product r)
 split (Cons x xs) (PTCons _ ls) rs = (Cons x ls', rs')

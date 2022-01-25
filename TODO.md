@@ -12,3 +12,8 @@ List of things that should or could be done:
 - Convert back to original representation
 - Square the fields representation
 - Remove emptyChoices since it is unneeded
+
+- Write instance for n=0
+- Write instances for n up to 4
+- experiment in Agda
+- Write tests (quickcheck)

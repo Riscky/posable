@@ -55,13 +55,12 @@ library
 
   -- Other library packages from which modules are imported.
   build-depends:       base >=4.13
-                     , generics-sop
+                     , generics-sop >= 0.5.1.1
                      , math-functions
                      , universe-base >= 1.1
                      , ghc-typelits-extra == 0.4.3
                      , first-class-families == 0.8.0.1
                      , finite-typelits == 0.1.4.2
-                     , singletons >= 3.0
                      , ghc-typelits-knownnat >= 0.7.6
 
   -- Directories containing source files.
