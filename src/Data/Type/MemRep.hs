@@ -22,6 +22,7 @@ module Data.Type.MemRep where
 import Generics.SOP hiding (Nil)
 import Generics.SOP.NP hiding (Nil)
 import Data.Finite (Finite, combineProduct, combineSum)
+import Data.Finite.Internal (Finite(..))
 
 import Fcf ( Eval, Exp, type (++), Map)
 
@@ -250,56 +251,114 @@ npMapF :: (All MemRep xs) => NP I xs -> NP Product (Eval (Map AppFields xs))
 npMapF SOP.Nil   = SOP.Nil
 npMapF (x :* xs) = fields (unI x) :* npMapF xs
 
-combineProducts :: (All KnownNat xs) => NP Finite xs -> Finite (NatProduct xs)
+-- copied from https://hackage.haskell.org/package/finite-typelits-0.1.4.2/docs/src/Data.Finite.html#getLeftType
+-- | 'fst'-biased (fst is the inner, and snd is the outer iteratee) product of finite sets.
+-- adapted to return the KnownNat constraint
+combineProduct' :: (KnownNat n) => Finite n -> Finite m -> Finite (n GHC.TypeLits.* m)
+combineProduct' fx@(Finite x) (Finite y) = Finite $ x + y * natVal fx
+
+
+combineProducts :: (All KnownNat xs) => NP Finite xs -> Finite (NatProductType xs)
 combineProducts SOP.Nil = 0
-combineProducts (y :* ys) = combineProduct (y, combineProducts ys)
+combineProducts (y :* ys) = combineProduct' y (combineProducts ys)
 
 -- generic instance for binary sums
+-- instance
+--     ( KnownNat (GChoices (SOP I '[ l, r]))
+--     , (KnownNat (NatProductType (MapChoices l)))
+--     , (All KnownNat (MapChoices l))
+--     , (All KnownNat (MapChoices r))
+--     , KnownNat (NatProductType (MapChoices r))
+--     , All MemRep l
+--     , All MemRep r
+--     ) => GMemRep (SOP I '[ l, r]) where
+--   -- type GChoices (SOP I '[ l, r]) = NatProductType (MapChoices l) + NatProductType (MapChoices r)
+--   gchoices (SOP (Z xs)) = combineSum $ Left (combineProducts (npMapC xs))
+--   gchoices (SOP (S (Z xs))) = combineSum $ Right (combineProducts $ npMapC xs)
+--   gchoices _ = error "rare situ"
+
+
+--   type GFields (SOP I '[ l, r]) = Eval (Foldl (ZipWith' (++)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) '[ l, r])))))
+--   gfields (SOP (Z ls))     = zipSumLeft (npFold Nil (npMapF ls)) (npFoldT PTNil (convertPureFields (pureFields :: NP PF r)))
+--   gfields (SOP (S (Z rs))) = zipSumRight (npFoldT PTNil (convertPureFields (pureFields :: NP PF l))) (npFold Nil (npMapF rs))
+--   gfields (SOP (S (S _))) = error "this is not even possible"
+
+--   gemptyFields = zipSumT (npFoldT PTNil (convertPureFields (pureFields :: NP PF l))) (npFoldT PTNil (convertPureFields (pureFields :: NP PF r)))
+
+
+  -- type family NatProduct (xs :: f Nat) :: Nat where
+  --   NatProduct '[] = 1
+  --   NatProduct (x ': xs) = x GHC.TypeLits.* NatProduct xs
+type family SumOfProducts (xss :: f (g Nat)) :: Nat where
+  SumOfProducts '[] = 0
+  SumOfProducts (xs ': xss) = NatProductType xs + SumOfProducts xss
+
+
+type family Map2Choices (xss :: f (g x)) :: f (g Nat) where
+  Map2Choices '[] = '[]
+  Map2Choices (xs ': xss) = MapChoices xs ': Map2Choices xss
+
+
+map2choices :: (All2 MemRep xss) => NS (NP I) xss -> NS (NP Finite) (Map2Choices xss)
+map2choices (Z x) = Z (npMapC x)
+map2choices (S xs) = S (map2choices xs)
+
+combineSumsOfProducts :: (All2 KnownNat xss, All NatProduct xss) => NS (NP Finite) xss -> Finite (SumOfProducts xss)
+combineSumsOfProducts (Z y) = combineSum (Left (combineProducts y))
+combineSumsOfProducts (S ys) = combineSum (Right (combineSumsOfProducts ys))
+
+-- generic instance for everything
 instance
-    ( KnownNat (GChoices (SOP I '[ l, r]))
-    , (KnownNat (NatProduct (MapChoices l)))
-    , (All KnownNat (MapChoices l))
-    , (All KnownNat (MapChoices r))
-    , All MemRep l
-    , All MemRep r
-    ) => GMemRep (SOP I '[ l, r]) where
-  type GChoices (SOP I '[ l, r]) = NatProduct (MapChoices l) + NatProduct (MapChoices r)
-  gchoices (SOP (Z xs)) = combineSum $ Left (combineProducts (npMapC xs))
-  gchoices (SOP (S (Z xs))) = combineSum $ Right (combineProducts $ npMapC xs)
-  gchoices _ = error "rare situ"
+    ( All2 MemRep xss
+    , (KnownNat (SumOfProducts (Map2Choices xss)))
+    , (All2 KnownNat (Map2Choices xss))
+    , (All NatProduct (Map2Choices xss))
+    ) => GMemRep (SOP I xss) where
+  type GChoices (SOP I xss) = SumOfProducts (Map2Choices xss)
+  gchoices x = combineSumsOfProducts $ map2choices $ unSOP x
 
+-- combineProducts :: (All KnownNat xs) => NP Finite xs -> Finite (NatProduct xs)
+-- combineProducts SOP.Nil = 0
+-- combineProducts (y :* ys) = combineProduct (y, combineProducts ys)
 
-  type GFields (SOP I '[ l, r]) = Eval (Foldl (ZipWith' (++)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) '[ l, r])))))
-  gfields (SOP (Z ls))     = zipSumLeft (npFold Nil (npMapF ls)) (npFoldT PTNil (convertPureFields (pureFields :: NP PF r)))
-  gfields (SOP (S (Z rs))) = zipSumRight (npFoldT PTNil (convertPureFields (pureFields :: NP PF l))) (npFold Nil (npMapF rs))
-  gfields (SOP (S (S _))) = error "this is not even possible"
+-- copied from https://hackage.haskell.org/package/finite-typelits-0.1.4.2/docs/src/Data.Finite.html#getLeftType
+getLeftType :: Either a b -> a
+getLeftType = error "getLeftType"
 
-  gemptyFields = zipSumT (npFoldT PTNil (convertPureFields (pureFields :: NP PF l))) (npFoldT PTNil (convertPureFields (pureFields :: NP PF r)))
+-- | 'Left'-biased (left values come first) disjoint union of finite sets.
+-- copied from https://hackage.haskell.org/package/finite-typelits-0.1.4.2/docs/src/Data.Finite.html#combineSum
+-- adapted to return a KnownNat constraint on the return type
+combineSum' :: (KnownNat n) => Either (Finite n) (Finite m) -> Finite (n + m)
+combineSum' (Left (Finite x)) = Finite x
+combineSum' efx@(Right (Finite x)) = Finite $ x + natVal (getLeftType efx)
 
+-- type FNatProduct a = KnownNat (NatProductType a)
 
--- generic instance for ternary sums
-instance
-    ( All MemRep x
-    , All MemRep y
-    , All MemRep z
-    , (KnownNat (NatProduct (MapChoices x)))
-    , (KnownNat (NatProduct (MapChoices y)))
-    , (KnownNat (NatProduct (MapChoices z)))
-    , (All KnownNat (MapChoices x))
-    , (All KnownNat (MapChoices y))
-    , (All KnownNat (MapChoices z))
-    ) => GMemRep (SOP I '[ x, y, z]) where
-  type GChoices (SOP I '[ x, y, z]) = (NatProduct (MapChoices x) + NatProduct (MapChoices y)) + NatProduct (MapChoices z)
-  gchoices (SOP (Z xs)) = combineSum $ Left xs'
-    where
-      xs' :: Finite (NatProduct (MapChoices x) + NatProduct (MapChoices y))
-      xs' = combineSum (Left (combineProducts (npMapC xs)))
-  gchoices (SOP (S (Z xs))) = combineSum (Left xs')
-    where
-      xs' :: Finite (NatProduct (MapChoices x) + NatProduct (MapChoices y))
-      xs' = combineSum (Right (combineProducts (npMapC xs)))
-  gchoices (SOP (S (S (Z xs)))) = combineSum (Right (combineProducts (npMapC xs)))
-  gchoices _ = error "rare situ"
+-- type KnownNatProduct' = KnownNatProduct
+
+-- -- generic instance for ternary sums
+-- instance
+--     ( All MemRep x
+--     , All MemRep y
+--     , All MemRep z
+--     , (KnownNat (NatProductType (MapChoices x)))
+--     , (KnownNat (NatProductType (MapChoices y)))
+--     , (KnownNat (NatProductType (MapChoices z)))
+--     , (All KnownNat (MapChoices x))
+--     , (All KnownNat (MapChoices y))
+--     , (All KnownNat (MapChoices z))
+--     ) => GMemRep (SOP I '[ x, y, z]) where
+  -- type GChoices (SOP I '[ x, y, z]) = (NatProductType (MapChoices x) + NatProductType (MapChoices y)) + NatProductType (MapChoices z)
+  -- gchoices (SOP (Z xs)) = combineSum $ Left xs'
+  --   where
+  --     xs' :: Finite (NatProductType (MapChoices x) + NatProductType (MapChoices y))
+  --     xs' = combineSum (Left (combineProducts (npMapC xs)))
+  -- gchoices (SOP (S (Z xs))) = combineSum (Left xs')
+  --   where
+  --     xs' :: Finite (NatProductType (MapChoices x) + NatProductType (MapChoices y))
+  --     xs' = combineSum (Right (combineProducts (npMapC xs)))
+  -- gchoices (SOP (S (S (Z xs)))) = combineSum (Right (combineProducts (npMapC xs)))
+  -- gchoices _ = error "rare situ"
 
   -- choices (North nv) = combineSum (Left es)
   --   where
@@ -311,11 +370,11 @@ instance
   --     es = combineSum (Right (choices ev))
   -- choices (South sv) = combineSum (Right (choices sv))
 
-  type GFields (SOP I '[ x, y, z]) = Eval (Foldl (ZipWith' (++)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) '[ x, y, z])))))
-  gfields (SOP (Z xs))         = zipSumLeft (zipSumLeft (npFold Nil (npMapF xs)) (npFoldT PTNil (convertPureFields (pureFields :: NP PF y)))) (npFoldT PTNil (convertPureFields (pureFields :: NP PF z)))
-  gfields (SOP (S (Z ys)))     = zipSumLeft (zipSumRight (npFoldT PTNil (convertPureFields (pureFields :: NP PF x))) (npFold Nil (npMapF ys))) (npFoldT PTNil (convertPureFields (pureFields :: NP PF z)))
-  gfields (SOP (S (S (Z zs)))) = zipSumRight (zipSumT (npFoldT PTNil (convertPureFields (pureFields :: NP PF x))) (npFoldT PTNil (convertPureFields (pureFields :: NP PF y)))) (npFold Nil (npMapF zs))
-  gfields (SOP (S (S (S _))))  = error "this is not even possible"
+  -- type GFields (SOP I '[ x, y, z]) = Eval (Foldl (ZipWith' (++)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) '[ x, y, z])))))
+  -- gfields (SOP (Z xs))         = zipSumLeft (zipSumLeft (npFold Nil (npMapF xs)) (npFoldT PTNil (convertPureFields (pureFields :: NP PF y)))) (npFoldT PTNil (convertPureFields (pureFields :: NP PF z)))
+  -- gfields (SOP (S (Z ys)))     = zipSumLeft (zipSumRight (npFoldT PTNil (convertPureFields (pureFields :: NP PF x))) (npFold Nil (npMapF ys))) (npFoldT PTNil (convertPureFields (pureFields :: NP PF z)))
+  -- gfields (SOP (S (S (Z zs)))) = zipSumRight (zipSumT (npFoldT PTNil (convertPureFields (pureFields :: NP PF x))) (npFoldT PTNil (convertPureFields (pureFields :: NP PF y)))) (npFold Nil (npMapF zs))
+  -- gfields (SOP (S (S (S _))))  = error "this is not even possible"
 
   -- gemptyFields = zipSumT (npFoldT PTNil (convertPureFields (pureFields :: NP PF l))) (npFoldT PTNil (convertPureFields (pureFields :: NP PF r)))
 
@@ -344,27 +403,32 @@ npMapC :: forall xs . (All MemRep xs) => NP I xs -> NP Finite (MapChoices xs)
 npMapC SOP.Nil   = SOP.Nil
 npMapC (x :* xs) = choices (unI x) :* npMapC xs
 
-type family NatProduct (xs :: f Nat) :: Nat where
-  NatProduct '[] = 1
-  NatProduct (x ': xs) = x GHC.TypeLits.* NatProduct xs
+class (All KnownNat x, KnownNat (NatProductType x)) => NatProduct x where
+  type NatProductType x :: Nat
+
+instance NatProduct '[] where
+  type NatProductType '[] = 1
+
+instance (KnownNat x, All KnownNat xs, KnownNat (NatProductType xs)) => NatProduct (x ': xs) where
+  type NatProductType (x ': xs) = x GHC.TypeLits.* NatProductType xs
 
 -- generic instance for unary sums (tuples)
-instance (
-    (All KnownNat (MapChoices as))
-  , (KnownNat (NatProduct (MapChoices as)))
-  , All MemRep as
-  ) => GMemRep (SOP I '[as]) where
-  type GChoices (SOP I '[as]) = NatProduct (MapChoices as)
-  gchoices (SOP (Z xs)) = combineProducts (npMapC xs)
-  gchoices (SOP _) = error "rare situ"
+-- instance (
+--     (All KnownNat (MapChoices as))
+--   , (KnownNat (NatProductType (MapChoices as)))
+--   , All MemRep as
+--   ) => GMemRep (SOP I '[as]) where
+--   -- type GChoices (SOP I '[as]) = NatProductType (MapChoices as)
+--   gchoices (SOP (Z xs)) = combineProducts (npMapC xs)
+--   gchoices (SOP _) = error "rare situ"
 
-  type GFields (SOP I '[as]) = Eval (Foldl (++) '[] (Eval (Map AppFields as)))
-  gfields (SOP (Z xs)) = npFold Nil (npMapF xs)
-  gfields (SOP (S _)) = error "this is not even possible"
+--   type GFields (SOP I '[as]) = Eval (Foldl (++) '[] (Eval (Map AppFields as)))
+--   gfields (SOP (Z xs)) = npFold Nil (npMapF xs)
+--   gfields (SOP (S _)) = error "this is not even possible"
 
-  gemptyFields = npFoldT PTNil (convertPureFields (pureFields :: NP PF as))
+--   gemptyFields = npFoldT PTNil (convertPureFields (pureFields :: NP PF as))
 
-  gfromMemRep cs fs = undefined -- SOP (Z $ generate cs fs (pureChoices :: NP PC as) (pureFields :: NP PF as))
+--   gfromMemRep cs fs = undefined -- SOP (Z $ generate cs fs (pureChoices :: NP PC as) (pureFields :: NP PF as))
 
 
 split :: Product (Eval (l ++ r)) -> ProductType l -> ProductType r -> (Product l, Product r)
