@@ -1,32 +1,18 @@
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE UndecidableSuperClasses #-}
-{-# LANGUAGE TypeFamilyDependencies #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# OPTIONS_GHC -Wno-orphans #-}
-{-# OPTIONS_GHC -Wno-missing-methods #-}
-{-# LANGUAGE NoStarIsType #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
+
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 -- This is needed to derive MemRep for tuples of size more then 4
 {-# OPTIONS_GHC -fconstraint-solver-iterations=5 #-}
 
-module Data.Type.Instances where
+module Data.Type.MemRep.Instances where
+
 import qualified GHC.Generics as GHC
 import Data.Int (Int8, Int16)
 import qualified Generics.SOP as SOP
 import Fcf (Eval, type (++))
-import Data.Type.MemRep
+import Data.Type.MemRep.MemRep
 import Data.Finite (
   combineProduct,
   combineSum,
@@ -34,13 +20,15 @@ import Data.Finite (
   , separateSum, Finite
   )
 import GHC.TypeNats (type (+), type (*))
+import Data.Type.MemRep.Generic ()
+import Data.Type.MemRep.Representation
 
 -----------------------------------------------------------------------
 -- Instances for common Haskell datatypes
-deriving instance MemRep Bool
-deriving instance MemRep x => MemRep (Maybe x)
--- deriving instance (MemRep l, MemRep r) => MemRep (Either l r)
-deriving instance MemRep ()
+-- deriving instance MemRep Bool
+-- deriving instance MemRep x => MemRep (Maybe x)
+-- -- deriving instance (MemRep l, MemRep r) => MemRep (Either l r)
+-- deriving instance MemRep ()
 -- deriving instance (MemRep a, MemRep b) => MemRep (a,b)
 
 
@@ -212,11 +200,11 @@ instance (MemRep x, MemRep y) => MemRep (x, y) where
   choices (x,y) = combineProduct (choices x, choices y)
 
   type Fields (x, y) = Eval (Fields x ++ Fields y)
-  fields (x,y) = rvconcat (fields x) (fields y)
+  fields (x,y) = concatP (fields x) (fields y)
 
   widths = widths @x ++ widths @y
 
-  emptyFields = rvconcatT (emptyFields @x) (emptyFields @y)
+  emptyFields = concatPT (emptyFields @x) (emptyFields @y)
 
   fromMemRep cs fs = (fromMemRep xcs xfs, fromMemRep ycs yfs)
                    where
@@ -229,11 +217,11 @@ instance (MemRep x, MemRep y, MemRep z) => MemRep (x, y, z) where
   choices (x, y, z) = combineProduct (combineProduct (choices x, choices y),choices z)
 
   type Fields (x, y, z) = Eval (Eval (Fields x ++ Fields y) ++ Fields z)
-  fields (x, y, z) = rvconcat (rvconcat (fields x) (fields y)) (fields z)
+  fields (x, y, z) = concatP (concatP (fields x) (fields y)) (fields z)
 
   widths = widths @x ++ widths @y ++ widths @z
 
-  emptyFields = rvconcatT (rvconcatT (emptyFields @x) (emptyFields @y)) (emptyFields @z)
+  emptyFields = concatPT (concatPT (emptyFields @x) (emptyFields @y)) (emptyFields @z)
 
   fromMemRep cs fs = (fromMemRep xcs xfs, fromMemRep ycs yfs, fromMemRep zcs zfs)
                    where
