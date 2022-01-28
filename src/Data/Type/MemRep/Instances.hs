@@ -11,7 +11,6 @@ module Data.Type.MemRep.Instances where
 import qualified GHC.Generics as GHC
 import Data.Int (Int8, Int16)
 import qualified Generics.SOP as SOP
-import Fcf (Eval, type (++))
 import Data.Type.MemRep.MemRep
 import Data.Finite (
   combineProduct,
@@ -141,7 +140,7 @@ instance (MemRep l, MemRep r) => MemRep (Either l r) where
   choices (Left lv)  = combineSum (Left (choices lv))
   choices (Right rv) = combineSum (Right (choices rv))
 
-  type Fields (Either l r) = Eval (ZipWith' (++) (Fields l) (Fields r))
+  type Fields (Either l r) = Merge (Fields l) (Fields r)
   fields (Left lv)  = zipSumLeft (fields lv) (emptyFields @r)
   fields (Right rv) = zipSumRight (emptyFields @l) (fields rv)
 
@@ -174,10 +173,10 @@ instance (MemRep n, MemRep e, MemRep s) => MemRep (Direction n e s) where
   -- choices (Left lv)  = combineSum (Left (choices lv))
   -- choices (Right rv) = combineSum (Right (choices rv))
 
-  type Fields (Direction n e s) =  Eval (Foldl (ZipWith' (++)) '[] '[ Fields n, Fields e, Fields s])
-  fields (North nv) = zipSumLeft  (zipSumLeft  (fields nv) (emptyFields @e)) (emptyFields @s)
-  fields (East  ev) = zipSumLeft  (zipSumRight (emptyFields @n) (fields ev)) (emptyFields @s)
-  fields (South sv) = zipSumRight (zipSumT     (emptyFields @n) (emptyFields @e)) (fields sv)
+  type Fields (Direction n e s) = FoldMerge '[ Fields n, Fields e, Fields s]
+  fields (North nv) = zipSumLeft  (fields nv)      (zipSumT     (emptyFields @e) (emptyFields @s))
+  fields (East  ev) = zipSumRight (emptyFields @n) (zipSumLeft  (fields ev)      (emptyFields @s))
+  fields (South sv) = zipSumRight (emptyFields @n) (zipSumRight (emptyFields @e) (fields sv))
 
   fromMemRep cs fs = case cs'' of
       Left (Left ncs)  -> North (fromMemRep ncs nfs)
@@ -190,16 +189,16 @@ instance (MemRep n, MemRep e, MemRep s) => MemRep (Direction n e s) where
       cs'' = case cs' of
         Left necs -> Left (separateSum necs)
         Right x   -> Right x
-      (nfs, efs, sfs) = splitHorizontal3 fs (emptyFields @n) (emptyFields @e) (emptyFields @s)
+      (nfs, efs, sfs) = undefined -- splitHorizontal3 fs (emptyFields @n) (emptyFields @e) (emptyFields @s)
   
-  emptyFields = zipSumT (zipSumT (emptyFields @n) (emptyFields @e)) (emptyFields @s)
+  emptyFields = zipSumT (emptyFields @n) (zipSumT (emptyFields @e) (emptyFields @s))
 
 -- Instance for product types (tuples)
 instance (MemRep x, MemRep y) => MemRep (x, y) where
   type Choices (x,y) = Choices x * Choices y
   choices (x,y) = combineProduct (choices x, choices y)
 
-  type Fields (x, y) = Eval (Fields x ++ Fields y)
+  type Fields (x, y) = Fields x ++ Fields y
   fields (x,y) = concatP (fields x) (fields y)
 
   widths = widths @x ++ widths @y
@@ -216,12 +215,12 @@ instance (MemRep x, MemRep y, MemRep z) => MemRep (x, y, z) where
   type Choices (x, y, z) = Choices x * Choices y * Choices z
   choices (x, y, z) = combineProduct (combineProduct (choices x, choices y),choices z)
 
-  type Fields (x, y, z) = Eval (Eval (Fields x ++ Fields y) ++ Fields z)
-  fields (x, y, z) = concatP (concatP (fields x) (fields y)) (fields z)
+  type Fields (x, y, z) = Appends '[Fields x, Fields y, Fields z]
+  fields (x, y, z) = concatP (fields x) (concatP (fields y) (concatP (fields z) Nil))
 
   widths = widths @x ++ widths @y ++ widths @z
 
-  emptyFields = concatPT (concatPT (emptyFields @x) (emptyFields @y)) (emptyFields @z)
+  emptyFields = concatPT (emptyFields @x) (concatPT (emptyFields @y) (concatPT (emptyFields @z) (PTNil)))
 
   fromMemRep cs fs = (fromMemRep xcs xfs, fromMemRep ycs yfs, fromMemRep zcs zfs)
                    where

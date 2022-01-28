@@ -15,7 +15,7 @@ import Data.Finite (Finite, combineProduct, combineSum)
 import Data.Type.MemRep.MemRep
 import Data.Type.MemRep.Representation
 
-import Fcf ( Eval, Exp, type (++), Map)
+import Fcf ( Eval, Exp, Map)
 
 import qualified Generics.SOP as SOP
 
@@ -32,11 +32,11 @@ import GHC.TypeLits (KnownNat, type (*), type (+))
 --   gchoices (SOP (Z xs)) = combineProducts (npMapC xs)
 --   gchoices (SOP _) = error "rare situ"
 
---   type GFields (SOP I '[as]) = Eval (Foldl (++) '[] (Eval (Map AppFields as)))
---   gfields (SOP (Z xs)) = npFold Nil (npMapF xs)
+--   type GFields (SOP I '[as]) = Appends (Eval (Map AppFields as))
+--   gfields (SOP (Z xs)) = npFold (npMapF xs)
 --   gfields (SOP (S _)) = error "this is not even possible"
 
---   gemptyFields = npFoldT PTNil (convertPureFields (pureFields :: NP PF as))
+--   gemptyFields = npFoldT (convertPureFields (pureFields :: NP PF as))
 
 --   gfromMemRep cs fs = undefined -- SOP (Z $ generate cs fs (pureChoices :: NP PC as) (pureFields :: NP PF as))
 
@@ -57,12 +57,16 @@ import GHC.TypeLits (KnownNat, type (*), type (+))
 --   gchoices _ = error "rare situ"
 
 
---   type GFields (SOP I '[ l, r]) = Eval (Foldl (ZipWith' (++)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) '[ l, r])))))
---   gfields (SOP (Z ls))     = zipSumLeft (npFold Nil (npMapF ls)) (npFoldT PTNil (convertPureFields (pureFields :: NP PF r)))
---   gfields (SOP (S (Z rs))) = zipSumRight (npFoldT PTNil (convertPureFields (pureFields :: NP PF l))) (npFold Nil (npMapF rs))
+--   type GFields (SOP I '[ l, r]) = FoldMerge (MapAppends (Eval (Map (Map AppFields) '[ l, r])))
+--   gfields (SOP (Z ls))     = zipSumLeft
+--                               (npFold (npMapF ls))
+--                               (npFoldT (convertPureFields (pureFields :: NP PF r)))
+--   gfields (SOP (S (Z rs))) = zipSumRight
+--                                 (npFoldT (convertPureFields (pureFields :: NP PF l)))
+--                                 (npFold (npMapF rs))
 --   gfields (SOP (S (S _))) = error "this is not even possible"
 
---   gemptyFields = zipSumT (npFoldT PTNil (convertPureFields (pureFields :: NP PF l))) (npFoldT PTNil (convertPureFields (pureFields :: NP PF r)))
+--   gemptyFields = zipSumT (npFoldT (convertPureFields (pureFields :: NP PF l))) (npFoldT (convertPureFields (pureFields :: NP PF r)))
 
 
 -- generic instance for ternary sums
@@ -78,10 +82,22 @@ import GHC.TypeLits (KnownNat, type (*), type (+))
 --   , (All KnownNat (MapChoices z))
 --   ) => GMemRep (SOP I '[ x, y, z]) where
 
---   type GFields (SOP I '[ x, y, z]) = Eval (Foldl (ZipWith' (++)) '[] (Eval (Map (Foldl (++) '[]) (Eval (Map (Map AppFields) '[ x, y, z])))))
---   gfields (SOP (Z xs))         = zipSumLeft (zipSumLeft (npFold Nil (npMapF xs)) (npFoldT PTNil (convertPureFields (pureFields :: NP PF y)))) (npFoldT PTNil (convertPureFields (pureFields :: NP PF z)))
---   gfields (SOP (S (Z ys)))     = zipSumLeft (zipSumRight (npFoldT PTNil (convertPureFields (pureFields :: NP PF x))) (npFold Nil (npMapF ys))) (npFoldT PTNil (convertPureFields (pureFields :: NP PF z)))
---   gfields (SOP (S (S (Z zs)))) = zipSumRight (zipSumT (npFoldT PTNil (convertPureFields (pureFields :: NP PF x))) (npFoldT PTNil (convertPureFields (pureFields :: NP PF y)))) (npFold Nil (npMapF zs))
+--   type GFields (SOP I '[ x, y, z]) = FoldMerge (MapAppends (Eval (Map (Map AppFields) '[ x, y, z])))
+--   gfields (SOP (Z xs))         = zipSumLeft
+--                                    (npFold (npMapF xs))
+--                                    (zipSumT
+--                                     (npFoldT (convertPureFields (pureFields :: NP PF y)))
+--                                     (npFoldT (convertPureFields (pureFields :: NP PF z))))
+--   gfields (SOP (S (Z ys)))     = zipSumRight
+--                                   (npFoldT (convertPureFields (pureFields :: NP PF x)))
+--                                   (zipSumLeft
+--                                     (npFold (npMapF ys))
+--                                     (npFoldT (convertPureFields (pureFields :: NP PF z))))
+--   gfields (SOP (S (S (Z zs)))) = zipSumRight
+--                                     (npFoldT (convertPureFields (pureFields :: NP PF x)))
+--                                     (zipSumRight
+--                                       (npFoldT (convertPureFields (pureFields :: NP PF y)))
+--                                       (npFold (npMapF zs)))
 --   gfields (SOP (S (S (S _))))  = error "this is not even possible"
 
 --   gemptyFields = undefined -- zipSumT (npFoldT PTNil (convertPureFields (pureFields :: NP PF l))) (npFoldT PTNil (convertPureFields (pureFields :: NP PF r)))
@@ -118,7 +134,7 @@ instance NatProduct '[] where
   type NatProductType '[] = 1
 
 instance (KnownNat x, All KnownNat xs, KnownNat (NatProductType xs)) => NatProduct (x ': xs) where
-  type NatProductType (x ': xs) = x GHC.TypeLits.* NatProductType xs
+  type NatProductType (x ': xs) = x * NatProductType xs
   
 
 type family SumOfProducts (xss :: f (g Nat)) :: Nat where
@@ -151,13 +167,13 @@ combineSumsOfProducts :: (All2 KnownNat xss, All NatProduct xss) => NS (NP Finit
 combineSumsOfProducts (Z y) = combineSum (Left (combineProducts y))
 combineSumsOfProducts (S ys) = combineSum (Right (combineSumsOfProducts ys))
 
-npFold :: Product ys -> NP Product xs -> Product (Eval (Foldl (++) ys xs))
-npFold acc SOP.Nil   = acc
-npFold acc (x :* xs) = npFold (concatP acc x) xs
+npFold :: NP Product xs -> Product (Appends xs)
+npFold SOP.Nil   = Nil
+npFold (x :* xs) = concatP x (npFold xs)
 
-npFoldT :: ProductType ys -> NP ProductType xs -> ProductType (Eval (Foldl (++) ys xs))
-npFoldT acc SOP.Nil   = acc
-npFoldT acc (x :* xs) = npFoldT (concatPT acc x) xs
+npFoldT :: NP ProductType xs -> ProductType (Appends xs)
+npFoldT SOP.Nil   = PTNil
+npFoldT (x :* xs) = concatPT x (npFoldT xs)
 
 npMapF :: (All MemRep xs) => NP I xs -> NP Product (Eval (Map AppFields xs))
 npMapF SOP.Nil   = SOP.Nil
