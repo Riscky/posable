@@ -7,8 +7,6 @@ module Data.Type.MemRep.Representation where
 import Generics.SOP (All, All2)
 import Data.Kind
 
-import Unsafe.Coerce (unsafeCoerce)
-
 infixr 5 ++
 type family (++) (xs :: [k]) (ys :: [k]) :: [k] where
     '[]       ++ ys = ys
@@ -142,12 +140,11 @@ split3 (Cons a as) (PTCons _ xs) ys zs = (Cons a xs', yz)
 split3 as PTNil ys zs = (Nil, split as ys zs)
 
 splits :: Product (Appends xs) -> ProductTypes xs -> Products xs
-splits (Cons x xs) (PSTCons (PTCons _ ys) yss) = unsafeCoerce $ PSCons (Cons x xs') ys'
+splits (Cons x xs) (PSTCons (PTCons _ ys) yss) = PSCons (Cons x xs') ys'
   where
-    PSCons xs' ys' = splits (unsafeCoerce xs) (PSTCons ys yss)
+    PSCons xs' ys' = splits xs (PSTCons ys yss)
 splits xs          (PSTCons PTNil yss)         = PSCons Nil (splits xs yss)
 splits Nil         PSTNil                      = PSNil
-splits Nil         (PSTCons (PTCons _ _) _) = error "types are not equivalent"
 
 data ProductTypes :: [[[Type]]] -> Type where
   PSTCons :: ProductType x -> ProductTypes xs -> ProductTypes (x ': xs)
