@@ -37,7 +37,7 @@ instance (
   gfields (SOP (Z xs)) = appends (mapFields xs)
   gfields (SOP (S _)) = error "this is not even possible"
 
-  gemptyFields = appendsT (pureMapFields @as)
+  gemptyFields = foldMergeT $ mapAppendsT $ (pureMap2Fields @'[ as])
 
   gfromMemRep cs fs = undefined -- SOP (Z $ generate cs fs (pureChoices :: NP PC as) (pureFields :: NP PF as))
 
@@ -67,11 +67,7 @@ instance
                                 (appends (mapFields rs))
   gfields (SOP (S (S _))) = error "this is not even possible"
 
-  gemptyFields = zipSumT
-                  (appendsT
-                    (pureMapFields @l))
-                  (appendsT
-                    (pureMapFields @r))
+  gemptyFields = foldMergeT $ mapAppendsT $ (pureMap2Fields @'[ l, r])
 
 
 -- generic instance for ternary sums
@@ -106,11 +102,7 @@ instance
                                       (appends (mapFields zs)))
   gfields (SOP (S (S (S _))))  = error "this is not even possible"
 
-  gemptyFields = zipSumT
-                    (appendsT (pureMapFields @x))
-                    (zipSumT
-                      (appendsT (pureMapFields @y))
-                      (appendsT (pureMapFields @z)))
+  gemptyFields = foldMergeT $ mapAppendsT $ (pureMap2Fields @'[ x, y, z])
 
 
 -- generic instance for n-ary sums (so for everything)
@@ -209,6 +201,9 @@ mapAppendsT :: NP (NP ProductType) xss -> NP ProductType (MapAppends xss)
 mapAppendsT SOP.Nil = SOP.Nil
 mapAppendsT (x :* xs) = appendsT x :* mapAppendsT xs
 
+foldMergeT :: NP ProductType xss -> ProductType (FoldMerge xss)
+foldMergeT SOP.Nil = PTNil
+foldMergeT (x :* xs) = zipSumT x (foldMergeT xs)
 
 --------------------------------------------------------------------------------
 -- Functions that deal with creating values from types
