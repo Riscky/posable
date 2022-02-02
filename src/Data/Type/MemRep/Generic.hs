@@ -37,7 +37,7 @@ instance (
   gfields (SOP (Z xs)) = appends (mapFields xs)
   gfields (SOP (S _)) = error "this is not even possible"
 
-  gemptyFields = appendsT (pureFields' @as)
+  gemptyFields = appendsT (pureMapFields @as)
 
   gfromMemRep cs fs = undefined -- SOP (Z $ generate cs fs (pureChoices :: NP PC as) (pureFields :: NP PF as))
 
@@ -61,17 +61,17 @@ instance
   type GFields (SOP I '[ l, r]) = FoldMerge (MapAppends (Map2Fields ('[ l, r])))
   gfields (SOP (Z ls))     = zipSumLeft
                               (appends (mapFields ls))
-                              (appendsT ((pureFields' @r)))
+                              (appendsT ((pureMapFields @r)))
   gfields (SOP (S (Z rs))) = zipSumRight
-                                (appendsT ( (pureFields' @l)))
+                                (appendsT ( (pureMapFields @l)))
                                 (appends (mapFields rs))
   gfields (SOP (S (S _))) = error "this is not even possible"
 
   gemptyFields = zipSumT
                   (appendsT
-                    (pureFields' @l))
+                    (pureMapFields @l))
                   (appendsT
-                    (pureFields' @r))
+                    (pureMapFields @r))
 
 
 -- generic instance for ternary sums
@@ -95,22 +95,22 @@ instance
   type GFields (SOP I '[ x, y, z]) = FoldMerge (MapAppends (Map2Fields '[ x, y, z]))
   -- gfields (SOP x)         = undefined $ mapAppends (map2Fields x)
   gfields (SOP (S (Z ys)))     = zipSumRight
-                                  (appendsT (pureFields' @x))
+                                  (appendsT (pureMapFields @x))
                                   (zipSumLeft
                                     (appends (mapFields ys))
-                                    (appendsT ((pureFields' @z))))
+                                    (appendsT ((pureMapFields @z))))
   gfields (SOP (S (S (Z zs)))) = zipSumRight
-                                    (appendsT (pureFields' @x))
+                                    (appendsT (pureMapFields @x))
                                     (zipSumRight
-                                      (appendsT (pureFields' @y))
+                                      (appendsT (pureMapFields @y))
                                       (appends (mapFields zs)))
   gfields (SOP (S (S (S _))))  = error "this is not even possible"
 
   gemptyFields = zipSumT
-                    (appendsT (pureFields' @x))
+                    (appendsT (pureMapFields @x))
                     (zipSumT
-                      (appendsT (pureFields' @y))
-                      (appendsT (pureFields' @z)))
+                      (appendsT (pureMapFields @y))
+                      (appendsT (pureMapFields @z)))
 
 
 -- generic instance for n-ary sums (so for everything)
@@ -161,9 +161,6 @@ type family SumOfProducts (xss :: f (g Nat)) :: Nat where
   SumOfProducts '[] = 0
   SumOfProducts (xs ': xss) = NatProductType xs + SumOfProducts xss
 
-
-newtype PF a = PF (ProductType (Fields a))
-
 --------------------------------------------------------------------------------
 -- Supporting functions
 --------------------------------------------------------------------------------
@@ -197,27 +194,51 @@ combineSumsOfProducts :: (All2 KnownNat xss, All NatProduct xss) => NS (NP Finit
 combineSumsOfProducts (Z y) = combineSum (Left (combineProducts y))
 combineSumsOfProducts (S ys) = combineSum (Right (combineSumsOfProducts ys))
 
-
-appendsT :: NP ProductType xs -> ProductType (Appends xs)
-appendsT SOP.Nil   = PTNil
-appendsT (x :* xs) = concatPT x (appendsT xs)
+foldMergeMapAppends :: NS (NP Product) xss -> Product (FoldMerge (MapAppends xss))
+foldMergeMapAppends = undefined
 
 combineProducts :: (All KnownNat xs) => NP Finite xs -> Finite (NatProductType xs)
 combineProducts SOP.Nil = 0
 combineProducts (y :* ys) = combineProduct (y, combineProducts ys)
 
-unPF :: PF a -> ProductType (Fields a)
-unPF (PF x) = x
+appendsT :: NP ProductType xs -> ProductType (Appends xs)
+appendsT SOP.Nil   = PTNil
+appendsT (x :* xs) = concatPT x (appendsT xs)
 
-convertPureFields :: NP PF xs -> NP ProductType (MapFields xs)
-convertPureFields SOP.Nil   = SOP.Nil
-convertPureFields (x :* xs) = unPF x :* convertPureFields xs
+mapAppendsT :: NP (NP ProductType) xss -> NP ProductType (MapAppends xss)
+mapAppendsT SOP.Nil = SOP.Nil
+mapAppendsT (x :* xs) = appendsT x :* mapAppendsT xs
 
-pureFields' :: forall xs . (All MemRep xs) => NP ProductType (MapFields xs)
-pureFields' = convertPureFields (pureFields @xs)
 
-pureFields :: (All MemRep xs) => NP PF xs
-pureFields = cpure_NP (Proxy :: Proxy MemRep) emptyFields'
+--------------------------------------------------------------------------------
+-- Functions that deal with creating values from types
 
-emptyFields' :: forall x . (MemRep x) => PF x
-emptyFields' = PF $ emptyFields @x
+newtype PF a = PF (ProductType (Fields a))
+
+pureMapFields :: forall xs . (All MemRep xs) => NP ProductType (MapFields xs)
+pureMapFields = convertPureFields (pureFields @xs)
+  where
+    convertPureFields :: NP PF ys -> NP ProductType (MapFields ys)
+    convertPureFields SOP.Nil   = SOP.Nil
+    convertPureFields ((PF x) :* xs) = x :* convertPureFields xs
+
+    pureFields :: (All MemRep zs) => NP PF zs
+    pureFields = cpure_NP (Proxy :: Proxy MemRep) purePF
+
+    purePF :: forall x . (MemRep x) => PF x
+    purePF = PF $ emptyFields @x
+
+newtype NPT a = NPT (NP (ProductType) (MapFields a))
+
+pureMap2Fields :: forall xss . (All2 MemRep xss) => NP (NP ProductType) (Map2Fields xss)
+pureMap2Fields = convertPure2Fields (pure2Fields @xss)
+  where
+    convertPure2Fields :: NP NPT yss -> NP (NP ProductType) (Map2Fields yss)
+    convertPure2Fields SOP.Nil   = SOP.Nil
+    convertPure2Fields ((NPT x) :* xs) = x :* convertPure2Fields xs
+
+    pure2Fields :: (All2 MemRep zss) => NP NPT zss
+    pure2Fields = cpure_NP (Proxy :: Proxy (All MemRep)) pureNPT
+
+    pureNPT :: forall xs . (All MemRep xs) => NPT xs
+    pureNPT = NPT $ pureMapFields @xs
