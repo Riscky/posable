@@ -23,97 +23,25 @@ import qualified Generics.SOP as SOP
 import GHC.Base (Nat)
 import GHC.TypeLits (KnownNat, type (*), type (+))
 
--- generic instance for unary sums (tuples)
-instance (
-    (All KnownNat (MapChoices as))
-  , (KnownNat (NatProductType (MapChoices as)))
-  , All MemRep as
-  , (NatProduct (MapChoices as))
-  ) => GMemRep (SOP I '[as]) where
-  type GChoices (SOP I '[ as]) = SumOfProducts (Map2Choices '[ as])
-  gchoices x = combineSumsOfProducts $ map2choices $ unSOP x
-
-  type GFields (SOP I '[as]) = Appends (MapFields as)
-  gfields (SOP (Z xs)) = appends (mapFields xs)
-  gfields (SOP (S _)) = error "this is not even possible"
-
-  gemptyFields = foldMergeT $ mapAppendsT $ (pureMap2Fields @'[ as])
-
-  gfromMemRep cs fs = undefined -- SOP (Z $ generate cs fs (pureChoices :: NP PC as) (pureFields :: NP PF as))
-
-
--- generic instance for binary sums
-instance
-    ( KnownNat (GChoices (SOP I '[ l, r]))
-    , (KnownNat (NatProductType (MapChoices l)))
-    , (All KnownNat (MapChoices l))
-    , (All KnownNat (MapChoices r))
-    , KnownNat (NatProductType (MapChoices r))
-    , All MemRep l
-    , All MemRep r
-    , (NatProduct (MapChoices l))
-    , (NatProduct (MapChoices r))
-    ) => GMemRep (SOP I '[ l, r]) where
-  type GChoices (SOP I '[ l, r]) = SumOfProducts (Map2Choices '[ l, r])
-  gchoices x = combineSumsOfProducts $ map2choices $ unSOP x
-
-
-  type GFields (SOP I '[ l, r]) = FoldMerge (MapAppends (Map2Fields ('[ l, r])))
-  gfields (SOP (Z ls))     = zipSumLeft
-                              (appends (mapFields ls))
-                              (appendsT ((pureMapFields @r)))
-  gfields (SOP (S (Z rs))) = zipSumRight
-                                (appendsT ( (pureMapFields @l)))
-                                (appends (mapFields rs))
-  gfields (SOP (S (S _))) = error "this is not even possible"
-
-  gemptyFields = foldMergeT $ mapAppendsT $ (pureMap2Fields @'[ l, r])
-
-
--- generic instance for ternary sums
-instance
-  ( All MemRep x
-  , All MemRep y
-  , All MemRep z
-  , (KnownNat (NatProductType (MapChoices x)))
-  , (KnownNat (NatProductType (MapChoices y)))
-  , (KnownNat (NatProductType (MapChoices z)))
-  , (All KnownNat (MapChoices x))
-  , (All KnownNat (MapChoices y))
-  , (All KnownNat (MapChoices z))
-  , (NatProduct (MapChoices x))
-  , (NatProduct (MapChoices y))
-  , (NatProduct (MapChoices z))
-  ) => GMemRep (SOP I '[ x, y, z]) where
-  type GChoices (SOP I '[ x, y, z]) = SumOfProducts (Map2Choices '[ x, y, z])
-  gchoices x = combineSumsOfProducts $ map2choices $ unSOP x
-
-  type GFields (SOP I '[ x, y, z]) = FoldMerge (MapAppends (Map2Fields '[ x, y, z]))
-  -- gfields (SOP x)         = undefined $ mapAppends (map2Fields x)
-  gfields (SOP (S (Z ys)))     = zipSumRight
-                                  (appendsT (pureMapFields @x))
-                                  (zipSumLeft
-                                    (appends (mapFields ys))
-                                    (appendsT ((pureMapFields @z))))
-  gfields (SOP (S (S (Z zs)))) = zipSumRight
-                                    (appendsT (pureMapFields @x))
-                                    (zipSumRight
-                                      (appendsT (pureMapFields @y))
-                                      (appends (mapFields zs)))
-  gfields (SOP (S (S (S _))))  = error "this is not even possible"
-
-  gemptyFields = foldMergeT $ mapAppendsT $ (pureMap2Fields @'[ x, y, z])
-
-
 -- generic instance for n-ary sums (so for everything)
--- instance
---   ( All2 MemRep xss
---   , (KnownNat (SumOfProducts (Map2Choices xss)))
---   , (All2 KnownNat (Map2Choices xss))
---   , (All NatProduct (Map2Choices xss))
---   ) => GMemRep (SOP I xss) where
---   type GChoices (SOP I xss) = SumOfProducts (Map2Choices xss)
---   gchoices x = combineSumsOfProducts $ map2choices $ unSOP x
+instance
+  ( All2 MemRep xss
+  , (KnownNat (SumOfProducts (Map2Choices xss)))
+  , (All2 KnownNat (Map2Choices xss))
+  , (All NatProduct (Map2Choices xss))
+  ) => GMemRep (SOP I xss) where
+
+  type GChoices (SOP I xss) = SumOfProducts (Map2Choices xss)
+  gchoices x = combineSumsOfProducts $ map2choices $ unSOP x
+
+  type GFields (SOP I xss) = FoldMerge (MapAppends (Map2Fields xss))
+  gfields (SOP x)         = foldMerge
+                              (mapAppendsT $ (pureMap2Fields @xss))
+                              (mapAppends (map2Fields x))
+  
+  gemptyFields = foldMergeT $ mapAppendsT $ (pureMap2Fields @xss)
+
+  gfromMemRep = undefined
 
 --------------------------------------------------------------------------------
 -- Supporting types and classes
@@ -186,8 +114,10 @@ combineSumsOfProducts :: (All2 KnownNat xss, All NatProduct xss) => NS (NP Finit
 combineSumsOfProducts (Z y) = combineSum (Left (combineProducts y))
 combineSumsOfProducts (S ys) = combineSum (Right (combineSumsOfProducts ys))
 
-foldMergeMapAppends :: NS (NP Product) xss -> Product (FoldMerge (MapAppends xss))
-foldMergeMapAppends = undefined
+foldMerge :: NP ProductType xss -> NS Product xss -> Product (FoldMerge xss)
+foldMerge SOP.Nil   _      = Nil
+foldMerge (_ :* xs) (Z y)  = zipSumLeft y (foldMergeT xs)
+foldMerge (x :* xs) (S ys) = zipSumRight x (foldMerge xs ys)
 
 combineProducts :: (All KnownNat xs) => NP Finite xs -> Finite (NatProductType xs)
 combineProducts SOP.Nil = 0
