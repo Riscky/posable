@@ -1,10 +1,11 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 -- This is needed to derive MemRep for tuples of size more then 4
-{-# OPTIONS_GHC -fconstraint-solver-iterations=5 #-}
+{-# OPTIONS_GHC -fconstraint-solver-iterations=6 #-}
 
 module Data.Type.MemRep.Instances where
 
@@ -28,7 +29,7 @@ import Data.Type.MemRep.Representation
 -- deriving instance MemRep Bool
 -- deriving instance MemRep x => MemRep (Maybe x)
 -- -- deriving instance (MemRep l, MemRep r) => MemRep (Either l r)
--- deriving instance MemRep ()
+deriving instance MemRep ()
 -- deriving instance (MemRep a, MemRep b) => MemRep (a,b)
 
 
@@ -171,9 +172,6 @@ instance (MemRep n, MemRep e, MemRep s) => MemRep (Direction n e s) where
       es = combineSum (Right (choices ev))
   choices (South sv) = combineSum (Right (choices sv))
 
-  -- choices (Left lv)  = combineSum (Left (choices lv))
-  -- choices (Right rv) = combineSum (Right (choices rv))
-
   type Fields (Direction n e s) = FoldMerge '[ Fields n, Fields e, Fields s]
   fields (North nv) = zipSumLeft  (fields nv)      (zipSumT     (emptyFields @e) (emptyFields @s))
   fields (East  ev) = zipSumRight (emptyFields @n) (zipSumLeft  (fields ev)      (emptyFields @s))
@@ -190,7 +188,8 @@ instance (MemRep n, MemRep e, MemRep s) => MemRep (Direction n e s) where
       cs'' = case cs' of
         Left necs -> Left (separateSum necs)
         Right x   -> Right x
-      (nfs, efs, sfs) = undefined -- splitHorizontal3 fs (emptyFields @n) (emptyFields @e) (emptyFields @s)
+      (efs, sfs) = splitHorizontal esfs (emptyFields @e) (emptyFields @s)
+      (nfs, esfs) = splitHorizontal fs (emptyFields @n) (zipSumT (emptyFields @e) (emptyFields @s))
   
   emptyFields = zipSumT (emptyFields @n) (zipSumT (emptyFields @e) (emptyFields @s))
 

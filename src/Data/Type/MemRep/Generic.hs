@@ -80,7 +80,7 @@ type family SumOfProducts (xss :: f (g Nat)) :: Nat where
   SumOfProducts (xs ': xss) = NatProductType xs + SumOfProducts xss
 
 --------------------------------------------------------------------------------
--- Supporting functions
+-- Functions that deal with Choices
 --------------------------------------------------------------------------------
 
 mapChoices :: forall xs . (All MemRep xs) => NP I xs -> NP Finite (MapChoices xs)
@@ -91,6 +91,17 @@ map2choices :: (All2 MemRep xss) => NS (NP I) xss -> NS (NP Finite) (Map2Choices
 map2choices (Z x) = Z (mapChoices x)
 map2choices (S xs) = S (map2choices xs)
 
+combineSumsOfProducts :: (All2 KnownNat xss, All NatProduct xss) => NS (NP Finite) xss -> Finite (SumOfProducts xss)
+combineSumsOfProducts (Z y) = combineSum (Left (combineProducts y))
+combineSumsOfProducts (S ys) = combineSum (Right (combineSumsOfProducts ys))
+
+combineProducts :: (All KnownNat xs) => NP Finite xs -> Finite (NatProductType xs)
+combineProducts SOP.Nil = 0
+combineProducts (y :* ys) = combineProduct (y, combineProducts ys)
+
+--------------------------------------------------------------------------------
+-- Functions that deal with Fields
+--------------------------------------------------------------------------------
 
 mapFields :: forall xs . (All MemRep xs) => NP I xs -> NP Product (MapFields xs)
 mapFields SOP.Nil   = SOP.Nil
@@ -108,18 +119,10 @@ appends :: NP Product xs -> Product (Appends xs)
 appends SOP.Nil   = Nil
 appends (x :* xs) = concatP x (appends xs)
 
-combineSumsOfProducts :: (All2 KnownNat xss, All NatProduct xss) => NS (NP Finite) xss -> Finite (SumOfProducts xss)
-combineSumsOfProducts (Z y) = combineSum (Left (combineProducts y))
-combineSumsOfProducts (S ys) = combineSum (Right (combineSumsOfProducts ys))
-
 foldMerge :: NP ProductType xss -> NS Product xss -> Product (FoldMerge xss)
 foldMerge SOP.Nil   _      = Nil
 foldMerge (_ :* xs) (Z y)  = zipSumLeft y (foldMergeT xs)
 foldMerge (x :* xs) (S ys) = zipSumRight x (foldMerge xs ys)
-
-combineProducts :: (All KnownNat xs) => NP Finite xs -> Finite (NatProductType xs)
-combineProducts SOP.Nil = 0
-combineProducts (y :* ys) = combineProduct (y, combineProducts ys)
 
 appendsT :: NP ProductType xs -> ProductType (Appends xs)
 appendsT SOP.Nil   = PTNil
@@ -175,3 +178,7 @@ unAppends (Cons x xs) ((PTCons _ ys) :* yss) = (Cons x xs') :* ys'
     (xs' :* ys') = unAppends xs (ys :* yss)
 unAppends xs          (PTNil :* yss)         = Nil :* (unAppends xs yss)
 unAppends Nil         SOP.Nil                = SOP.Nil
+
+mapUnAppends :: NS Product (MapAppends xss) -> NP (NP ProductType) xss -> NS (NP Product) xss
+mapUnAppends (Z x)  (y :* _)  = Z (unAppends x y)
+mapUnAppends (S xs) (_ :* ys) = S (mapUnAppends xs ys)
