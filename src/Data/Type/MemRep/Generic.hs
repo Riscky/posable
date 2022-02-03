@@ -12,7 +12,7 @@ module Data.Type.MemRep.Generic where
 
 import Generics.SOP hiding (Nil)
 import Generics.SOP.NP hiding (Nil)
-import Data.Finite (Finite, combineProduct, combineSum)
+import Data.Finite (Finite, combineProduct, combineSum, separateProduct)
 import Data.Type.MemRep.MemRep
 import Data.Type.MemRep.Representation
 
@@ -184,3 +184,9 @@ unAppends Nil         SOP.Nil                = SOP.Nil
 mapUnAppends :: NS Product (MapAppends xss) -> NP (NP ProductType) xss -> NS (NP Product) xss
 mapUnAppends (Z x)  (y :* _)  = Z (unAppends x y)
 mapUnAppends (S xs) (_ :* ys) = S (mapUnAppends xs ys)
+
+separateProducts :: All KnownNat xs => Finite (Products xs) -> NP Finite xs -> NP Finite xs
+separateProducts _ SOP.Nil   = SOP.Nil
+separateProducts x (_ :* ys) = x' :* (separateProducts xs ys)
+  where
+    (x', xs)  = separateProduct x

@@ -195,8 +195,8 @@ instance (MemRep n, MemRep e, MemRep s) => MemRep (Direction n e s) where
 
 -- Instance for product types (tuples)
 instance (MemRep x, MemRep y) => MemRep (x, y) where
-  type Choices (x,y) = Choices x * Choices y
-  choices (x,y) = combineProduct (choices x, choices y)
+  type Choices (x,y) = Products '[Choices x, Choices y]
+  choices (x,y) = combineProducts (choices x :* choices y :* SOP.Nil)
 
   type Fields (x, y) = Appends [Fields x, Fields y]
   fields (x,y) = appends (fields x :* fields y :* SOP.Nil)
@@ -207,13 +207,13 @@ instance (MemRep x, MemRep y) => MemRep (x, y) where
 
   fromMemRep cs fs = (fromMemRep xcs xfs, fromMemRep ycs yfs)
                    where
-                     (xcs, ycs) = separateProduct cs
+                     (xcs :* ycs :* SOP.Nil) = separateProducts cs (emptyChoices @x :* emptyChoices @y :* SOP.Nil)
                      (xfs :* yfs :* SOP.Nil) = unAppends fs (emptyFields @x :* emptyFields @y :* SOP.Nil)
 
 -- Instance for 3-tuples
 instance (MemRep x, MemRep y, MemRep z) => MemRep (x, y, z) where
-  type Choices (x, y, z) = Choices x * Choices y * Choices z
-  choices (x, y, z) = combineProduct (combineProduct (choices x, choices y),choices z)
+  type Choices (x, y, z) = Products '[Choices x, Choices y, Choices z]
+  choices (x, y, z) = combineProducts (choices x :* choices y :* choices z :* SOP.Nil)
 
   type Fields (x, y, z) = Appends '[Fields x, Fields y, Fields z]
   fields (x, y, z) = concatP (fields x) (concatP (fields y) (concatP (fields z) Nil))
@@ -224,8 +224,5 @@ instance (MemRep x, MemRep y, MemRep z) => MemRep (x, y, z) where
 
   fromMemRep cs fs = (fromMemRep xcs xfs, fromMemRep ycs yfs, fromMemRep zcs zfs)
                    where
-                    (xcs, ycs)  = separateProduct xycs
-                    (xycs, zcs) = separateProduct cs
+                    (xcs :* ycs :* zcs :* SOP.Nil)  = separateProducts cs (emptyChoices @x :* emptyChoices @y :* emptyChoices @z :* SOP.Nil)
                     (xfs :* yfs :* zfs :* SOP.Nil) = unAppends fs (emptyFields @x :* emptyFields @y  :* emptyFields @z :* SOP.Nil)
-
-                  

@@ -32,8 +32,8 @@ class (KnownNat (Choices x)) => MemRep x where
     ) => x -> Finite (Choices x)
   choices x = gchoices $ from x
 
-  emptyChoices :: Integer
-  emptyChoices = natVal (SOP.Proxy @(Choices x))
+  emptyChoices :: Finite (Choices x)
+  emptyChoices = 0
 
   fromMemRep :: Finite (Choices x) -> Product (Fields x) -> x
 
