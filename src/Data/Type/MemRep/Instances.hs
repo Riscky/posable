@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 -- This is needed to derive MemRep for tuples of size more then 4
@@ -14,13 +15,12 @@ import Data.Int (Int8, Int16)
 import Generics.SOP hiding (Nil)
 import qualified Generics.SOP as SOP
 import Data.Type.MemRep.MemRep
-import Data.Finite (
-  combineProduct,
-  combineSum,
-  separateProduct
-  , separateSum, Finite
+import Data.Finite
+  ( combineSum
+  , separateSum
+  , Finite
   )
-import GHC.TypeNats (type (+), type (*))
+import GHC.TypeNats (type (+))
 import Data.Type.MemRep.Generic
 import Data.Type.MemRep.Representation
 
@@ -138,7 +138,7 @@ instance MemRep Int16 where
 
 -- Instance for Either, recursively defined
 instance (MemRep l, MemRep r) => MemRep (Either l r) where
-  type Choices (Either l r) = Choices l + Choices r
+  type Choices (Either l r) = Sums (MapProducts (Map2Choices '[ '[l], '[r]]))
   choices (Left lv)  = combineSum (Left (choices lv))
   choices (Right rv) = combineSum (Right (choices rv))
 
@@ -224,5 +224,5 @@ instance (MemRep x, MemRep y, MemRep z) => MemRep (x, y, z) where
 
   fromMemRep cs fs = (fromMemRep xcs xfs, fromMemRep ycs yfs, fromMemRep zcs zfs)
                    where
-                    (xcs :* ycs :* zcs :* SOP.Nil)  = separateProducts cs (emptyChoices @x :* emptyChoices @y :* emptyChoices @z :* SOP.Nil)
-                    (xfs :* yfs :* zfs :* SOP.Nil) = unAppends fs (emptyFields @x :* emptyFields @y  :* emptyFields @z :* SOP.Nil)
+                    (xcs :* ycs :* zcs :* SOP.Nil) = separateProducts cs (emptyChoices @x :* emptyChoices @y :* emptyChoices @z :* SOP.Nil)
+                    (xfs :* yfs :* zfs :* SOP.Nil) = unAppends fs (emptyFields @x :* emptyFields @y :* emptyFields @z :* SOP.Nil)
