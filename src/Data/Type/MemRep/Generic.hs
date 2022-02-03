@@ -26,13 +26,13 @@ import GHC.TypeLits (KnownNat, type (*), type (+))
 -- generic instance for n-ary sums (so for everything)
 instance
   ( All2 MemRep xss
-  , (KnownNat (SumOfProducts (Map2Choices xss)))
-  , (All2 KnownNat (Map2Choices xss))
-  , (All NatProduct (Map2Choices xss))
+  , KnownNat (Sums (MapProducts (Map2Choices xss)))
+  , All2 KnownNat (Map2Choices xss)
+  , All KnownNat (MapProducts (Map2Choices xss))
   ) => GMemRep (SOP I xss) where
 
-  type GChoices (SOP I xss) = SumOfProducts (Map2Choices xss)
-  gchoices x = combineSumsOfProducts $ map2choices $ unSOP x
+  type GChoices (SOP I xss) = Sums (MapProducts (Map2Choices xss))
+  gchoices x = sums $ mapProducts $ map2choices $ unSOP x
 
   type GFields (SOP I xss) = FoldMerge (MapAppends (Map2Fields xss))
   gfields (SOP x)         = foldMerge
@@ -63,21 +63,19 @@ type family MapFields (xs :: f x) :: f [[Type]] where
 type family Map2Fields (xss :: f (g x)) :: f (g [[Type]]) where
   Map2Fields '[] = '[]
   Map2Fields (xs ': xss) = MapFields xs ': Map2Fields xss
-  
 
-class (All KnownNat x, KnownNat (NatProductType x)) => NatProduct x where
-  type NatProductType x :: Nat
 
-instance NatProduct '[] where
-  type NatProductType '[] = 1
+type family Products (xs :: f Nat) :: Nat where
+  Products '[] = 1
+  Products (x ': xs) = x * Products xs
 
-instance (KnownNat x, All KnownNat xs, KnownNat (NatProductType xs)) => NatProduct (x ': xs) where
-  type NatProductType (x ': xs) = x * NatProductType xs
-  
+type family MapProducts (xss :: f (g Nat)) :: f Nat where
+  MapProducts '[] = '[]
+  MapProducts (xs ': xss) = Products xs ': MapProducts xss
 
-type family SumOfProducts (xss :: f (g Nat)) :: Nat where
-  SumOfProducts '[] = 0
-  SumOfProducts (xs ': xss) = NatProductType xs + SumOfProducts xss
+type family Sums (xs :: f Nat) :: Nat where
+  Sums '[] = 0
+  Sums (x ': xs) = x + Sums xs
 
 --------------------------------------------------------------------------------
 -- Functions that deal with Choices
@@ -91,11 +89,15 @@ map2choices :: (All2 MemRep xss) => NS (NP I) xss -> NS (NP Finite) (Map2Choices
 map2choices (Z x) = Z (mapChoices x)
 map2choices (S xs) = S (map2choices xs)
 
-combineSumsOfProducts :: (All2 KnownNat xss, All NatProduct xss) => NS (NP Finite) xss -> Finite (SumOfProducts xss)
-combineSumsOfProducts (Z y) = combineSum (Left (combineProducts y))
-combineSumsOfProducts (S ys) = combineSum (Right (combineSumsOfProducts ys))
+sums :: All KnownNat xs => NS Finite xs -> Finite (Sums xs)
+sums (Z y) = combineSum (Left y)
+sums (S ys) = combineSum (Right (sums ys))
 
-combineProducts :: (All KnownNat xs) => NP Finite xs -> Finite (NatProductType xs)
+mapProducts :: (All2 KnownNat xss) => NS (NP Finite) xss -> NS Finite (MapProducts xss)
+mapProducts (Z x) = Z (combineProducts x)
+mapProducts (S xs) = S (mapProducts xs)
+
+combineProducts :: (All KnownNat xs) => NP Finite xs -> Finite (Products xs)
 combineProducts SOP.Nil = 0
 combineProducts (y :* ys) = combineProduct (y, combineProducts ys)
 
