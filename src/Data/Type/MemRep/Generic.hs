@@ -41,8 +41,6 @@ instance
   
   gemptyFields = foldMergeT $ mapAppendsT $ (pureMap2Fields @xss)
 
-  gfromMemRep = undefined
-
 --------------------------------------------------------------------------------
 -- Supporting types and classes
 --------------------------------------------------------------------------------
@@ -167,3 +165,13 @@ pureMap2Fields = convertPure2Fields (pure2Fields @xss)
 
     pureNPT :: forall xs . (All MemRep xs) => NPT xs
     pureNPT = NPT $ pureMapFields @xs
+
+-------------------------------------------------------
+-- Functions to get back to the SOP representation
+
+unAppends :: Product (Appends xs) -> NP ProductType xs -> NP Product xs
+unAppends (Cons x xs) ((PTCons _ ys) :* yss) = (Cons x xs') :* ys'
+  where
+    (xs' :* ys') = unAppends xs (ys :* yss)
+unAppends xs          (PTNil :* yss)         = Nil :* (unAppends xs yss)
+unAppends Nil         SOP.Nil                = SOP.Nil

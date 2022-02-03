@@ -127,33 +127,6 @@ takeRight :: SumType l -> Sum r -> Sum (l ++ r)
 takeRight (STSucc _ ls) rs = Skip (takeRight ls rs)
 takeRight STZero        rs = rs
 
-split :: Product (l ++ r) -> ProductType l -> ProductType r -> (Product l, Product r)
-split (Cons x xs) (PTCons _ ls) rs = (Cons x ls', rs')
-  where
-    (ls', rs') = split xs ls rs
-split xs PTNil _ = (Nil, xs)
-
-split3 :: Product (x ++ y ++ z) -> ProductType x -> ProductType y -> ProductType z -> (Product x, (Product y, Product z))
-split3 (Cons a as) (PTCons _ xs) ys zs = (Cons a xs', yz)
-  where
-    (xs', yz) = split3 as xs ys zs
-split3 as PTNil ys zs = (Nil, split as ys zs)
-
-splits :: Product (Appends xs) -> ProductTypes xs -> Products xs
-splits (Cons x xs) (PSTCons (PTCons _ ys) yss) = PSCons (Cons x xs') ys'
-  where
-    PSCons xs' ys' = splits xs (PSTCons ys yss)
-splits xs          (PSTCons PTNil yss)         = PSCons Nil (splits xs yss)
-splits Nil         PSTNil                      = PSNil
-
-data ProductTypes :: [[[Type]]] -> Type where
-  PSTCons :: ProductType x -> ProductTypes xs -> ProductTypes (x ': xs)
-  PSTNil  :: ProductTypes '[]
-
-data Products :: [[[Type]]] -> Type where
-  PSCons :: Product x -> Products xs -> Products (x ': xs)
-  PSNil  :: Products '[]
-
 splitHorizontal :: Product (Merge l r) -> ProductType l -> ProductType r -> (Product l, Product r)
 splitHorizontal Nil PTNil         PTNil         = (Nil, Nil)
 splitHorizontal x   PTNil         (PTCons _ _) = (Nil, x)
@@ -162,25 +135,6 @@ splitHorizontal (Cons x xs) (PTCons l ls) (PTCons r rs) = (Cons l' ls', Cons r' 
   where
     (l', r') = splitSum x l r
     (ls', rs') = splitHorizontal xs ls rs
-
--- splitHorizontal3 :: Product (Merge x (Merge y z)) -> ProductType x -> ProductType y -> ProductType z -> (Product x, Product y, Product z)
--- splitHorizontal3 Nil PTNil         PTNil         PTNil         = (Nil, Nil, Nil)
--- splitHorizontal3 a   (PTCons _ _)  PTNil         PTNil         = (a, Nil, Nil)
--- splitHorizontal3 a   PTNil         (PTCons _ _)  PTNil         = (Nil, a, Nil)
--- splitHorizontal3 a   PTNil         PTNil         (PTCons _ _ ) = (Nil, Nil, a)
--- splitHorizontal3 a   x             y             PTNil         = (x', y', Nil)
---   where
---     (x', y') = splitHorizontal a x y
--- splitHorizontal3 a   x             PTNil         z             = (x', Nil, z')
---   where
---     (x', z') = splitHorizontal a x z
--- splitHorizontal3 a   PTNil         y             z             = (Nil, y', z')
---   where
---     (y', z') = splitHorizontal a y z
--- splitHorizontal3 (Cons a as) (PTCons x xs) (PTCons y ys) (PTCons z zs) = (Cons x' xs', Cons y' ys', Cons z' zs')
---   where
---     (x', y', z') = splitSum3 a x y z
---     (xs', ys', zs') = splitHorizontal3 as xs ys zs
 
 splitSum :: Sum (l ++ r) -> SumType l -> SumType r -> (Sum l, Sum r)
 splitSum (Pick x)  (STSucc _ _)  rs = (Pick x, makeEmpty rs)

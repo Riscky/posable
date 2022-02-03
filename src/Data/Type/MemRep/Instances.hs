@@ -10,6 +10,7 @@ module Data.Type.MemRep.Instances where
 
 import qualified GHC.Generics as GHC
 import Data.Int (Int8, Int16)
+import Generics.SOP hiding (Nil)
 import qualified Generics.SOP as SOP
 import Data.Type.MemRep.MemRep
 import Data.Finite (
@@ -19,7 +20,7 @@ import Data.Finite (
   , separateSum, Finite
   )
 import GHC.TypeNats (type (+), type (*))
-import Data.Type.MemRep.Generic ()
+import Data.Type.MemRep.Generic
 import Data.Type.MemRep.Representation
 
 -----------------------------------------------------------------------
@@ -198,17 +199,17 @@ instance (MemRep x, MemRep y) => MemRep (x, y) where
   type Choices (x,y) = Choices x * Choices y
   choices (x,y) = combineProduct (choices x, choices y)
 
-  type Fields (x, y) = Fields x ++ Fields y
-  fields (x,y) = concatP (fields x) (fields y)
+  type Fields (x, y) = Appends [Fields x, Fields y]
+  fields (x,y) = appends (fields x :* fields y :* SOP.Nil)
 
   widths = widths @x ++ widths @y
 
-  emptyFields = concatPT (emptyFields @x) (emptyFields @y)
+  emptyFields = appendsT (emptyFields @x :* emptyFields @y :* SOP.Nil)
 
   fromMemRep cs fs = (fromMemRep xcs xfs, fromMemRep ycs yfs)
                    where
                      (xcs, ycs) = separateProduct cs
-                     (xfs, yfs) = split fs (emptyFields @x) (emptyFields @y)
+                     (xfs :* yfs :* SOP.Nil) = unAppends fs (emptyFields @x :* emptyFields @y :* SOP.Nil)
 
 -- Instance for 3-tuples
 instance (MemRep x, MemRep y, MemRep z) => MemRep (x, y, z) where
@@ -226,5 +227,6 @@ instance (MemRep x, MemRep y, MemRep z) => MemRep (x, y, z) where
                    where
                     (xcs, ycs)  = separateProduct xycs
                     (xycs, zcs) = separateProduct cs
-                    (PSCons xfs (PSCons yfs (PSCons zfs PSNil))) = splits fs $ PSTCons (emptyFields @x)  $ PSTCons (emptyFields @y)  $ PSTCons (emptyFields @z)  PSTNil
+                    (xfs :* yfs :* zfs :* SOP.Nil) = unAppends fs (emptyFields @x :* emptyFields @y  :* emptyFields @z :* SOP.Nil)
 
+                  
