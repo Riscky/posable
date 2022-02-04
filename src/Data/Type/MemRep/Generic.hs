@@ -24,7 +24,6 @@ import qualified Generics.SOP as SOP
 import GHC.Base (Nat)
 import GHC.TypeLits (KnownNat, type (*), type (+))
 
-import Unsafe.Coerce (unsafeCoerce)
 
 -- generic instance for n-ary sums (so for everything)
 -- instance
@@ -62,10 +61,10 @@ instance
   
   gemptyFields = foldMergeT $ mapAppendsT $ (pureMap2Fields @'[as])
 
-  gfromMemRep cs fs = SOP $ Z $ zipFromMemRep cs' (toPF fs')
+  gfromMemRep cs fs = SOP $ Z $ zipFromMemRep cs' fs'
     where
       cs' = separateProducts' cs (pureChoices @as)
-      fs' = unAppends fs (pureMapFields @as)
+      fs' = unAppends' fs (pureFields @as)
 
 
 --------------------------------------------------------------------------------
@@ -179,11 +178,11 @@ pureMapFields = convertPureFields (pureFields @xs)
     convertPureFields SOP.Nil   = SOP.Nil
     convertPureFields ((PFT x) :* xs) = x :* convertPureFields xs
 
-    pureFields :: (All MemRep zs) => NP PFT zs
-    pureFields = cpure_NP (Proxy :: Proxy MemRep) purePFT
+pureFields :: (All MemRep zs) => NP PFT zs
+pureFields = cpure_NP (Proxy :: Proxy MemRep) purePFT
 
-    purePFT :: forall x . (MemRep x) => PFT x
-    purePFT = PFT $ emptyFields @x
+purePFT :: forall x . (MemRep x) => PFT x
+purePFT = PFT $ emptyFields @x
 
 newtype NPT a = NPT (NP (ProductType) (MapFields a))
 
@@ -210,11 +209,18 @@ unAppends (Cons x xs) ((PTCons _ ys) :* yss) = (Cons x xs') :* ys'
 unAppends xs          (PTNil :* yss)         = Nil :* (unAppends xs yss)
 unAppends Nil         SOP.Nil                = SOP.Nil
 
--- This looks terrible, but should be alright?
--- I suppose I need some injectivity notations somewhere
-toPF :: NP Product (MapFields xs) -> NP PF xs
-toPF SOP.Nil = unsafeCoerce SOP.Nil
-toPF (x :* xs) = unsafeCoerce $ PF (unsafeCoerce x) :* toPF (unsafeCoerce xs)
+
+unConcatP :: Product (x ++ y) -> ProductType x -> (Product x, Product y)
+unConcatP xs PTNil                  = (Nil, xs)
+unConcatP (Cons x xs) (PTCons _ ts) = (Cons x xs', ys')
+  where
+    (xs', ys') = unConcatP xs ts
+
+unAppends' :: Product (Appends (MapFields xs)) -> NP PFT xs -> NP PF xs
+unAppends' Nil SOP.Nil     = SOP.Nil
+unAppends' xs  (PFT ys :* yss) = PF x' :* (unAppends' xs' yss)
+  where
+    (x', xs') = unConcatP xs ys
 
 mapUnAppends :: NS Product (MapAppends xss) -> NP (NP ProductType) xss -> NS (NP Product) xss
 mapUnAppends (Z x)  (y :* _)  = Z (unAppends x y)
