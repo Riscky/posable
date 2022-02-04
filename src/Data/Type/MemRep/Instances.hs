@@ -35,8 +35,8 @@ deriving instance MemRep ()
 
 -----------------------------------------------------------------------
 -- Instances for some made up datatypes
-data Try a b = Som a | Oth b
-             deriving (GHC.Generic, SOP.Generic, MemRep, Show)
+-- data Try a b = Som a | Oth b
+--              deriving (GHC.Generic, SOP.Generic, MemRep, Show)
 
 data Tuple1 a = T1 a
               deriving (GHC.Generic, SOP.Generic, MemRep)
@@ -45,7 +45,7 @@ data Tuple a b = T a b
                deriving (GHC.Generic, SOP.Generic, MemRep)
 
 data Tuple3 a b c = T3 a b c
-                  deriving (GHC.Generic, SOP.Generic, MemRep)
+                  deriving (GHC.Generic, SOP.Generic, MemRep, Show)
 
 data Tuple5 a b c d e = T5 a b c d e
                       deriving (GHC.Generic, SOP.Generic, MemRep)
@@ -53,9 +53,9 @@ data Tuple5 a b c d e = T5 a b c d e
 data Unit = Unit
           deriving (GHC.Generic, SOP.Generic, MemRep)
 
-data MultiSum x y = First x y
-                  | Second y x
-                  deriving (GHC.Generic, SOP.Generic, MemRep)
+-- data MultiSum x y = First x y
+--                   | Second y x
+--                   deriving (GHC.Generic, SOP.Generic, MemRep)
 
 data Direction n e s = North n
                      | East e

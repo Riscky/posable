@@ -13,7 +13,7 @@ module Data.Type.MemRep.Generic where
 
 import Generics.SOP hiding (Nil)
 import Generics.SOP.NP hiding (Nil)
-import Data.Finite (Finite, combineProduct, combineSum, separateProduct)
+import Data.Finite (Finite, combineProduct, combineSum, separateProduct, separateSum)
 import Data.Type.MemRep.MemRep
 import Data.Type.MemRep.Representation
 
@@ -24,29 +24,55 @@ import qualified Generics.SOP as SOP
 import GHC.Base (Nat)
 import GHC.TypeLits (KnownNat, type (*), type (+))
 
+import Unsafe.Coerce (unsafeCoerce)
+
+-- generic instance for n-ary sums (so for everything)
+-- instance
+--   ( All2 MemRep xss
+--   , KnownNat (Sums (MapProducts (Map2Choices xss)))
+--   , All2 KnownNat (Map2Choices xss)
+--   , All KnownNat (MapProducts (Map2Choices xss))
+--   ) => GMemRep (SOP I xss) where
+
+--   type GChoices (SOP I xss) = Sums (MapProducts (Map2Choices xss))
+--   gchoices x = sums $ mapProducts $ map2choices $ unSOP x
+
+--   type GFields (SOP I xss) = FoldMerge (MapAppends (Map2Fields xss))
+--   gfields (SOP x)         = foldMerge
+--                               (mapAppendsT $ (pureMap2Fields @xss))
+--                               (mapAppends (map2Fields x))
+  
+--   gemptyFields = foldMergeT $ mapAppendsT $ (pureMap2Fields @xss)
+
 -- generic instance for n-ary sums (so for everything)
 instance
-  ( All2 MemRep xss
-  , KnownNat (Sums (MapProducts (Map2Choices xss)))
-  , All2 KnownNat (Map2Choices xss)
-  , All KnownNat (MapProducts (Map2Choices xss))
-  ) => GMemRep (SOP I xss) where
+  ( All2 MemRep '[as]
+  , KnownNat (Sums (MapProducts (Map2Choices '[as])))
+  , All2 KnownNat (Map2Choices '[as])
+  , All KnownNat (MapProducts (Map2Choices '[as]))
+  ) => GMemRep (SOP I '[as]) where
 
-  type GChoices (SOP I xss) = Sums (MapProducts (Map2Choices xss))
+  type GChoices (SOP I '[as]) = Sums (MapProducts (Map2Choices '[as]))
   gchoices x = sums $ mapProducts $ map2choices $ unSOP x
 
-  type GFields (SOP I xss) = FoldMerge (MapAppends (Map2Fields xss))
+  type GFields (SOP I '[as]) = FoldMerge (MapAppends (Map2Fields '[as]))
   gfields (SOP x)         = foldMerge
-                              (mapAppendsT $ (pureMap2Fields @xss))
+                              (mapAppendsT $ (pureMap2Fields @'[as]))
                               (mapAppends (map2Fields x))
   
-  gemptyFields = foldMergeT $ mapAppendsT $ (pureMap2Fields @xss)
+  gemptyFields = foldMergeT $ mapAppendsT $ (pureMap2Fields @'[as])
+
+  gfromMemRep cs fs = SOP $ Z $ zipFromMemRep cs' (toPF fs')
+    where
+      cs' = separateProducts' cs (pureChoices @as)
+      fs' = unAppends fs (pureMapFields @as)
+
 
 --------------------------------------------------------------------------------
 -- Supporting types and classes
 --------------------------------------------------------------------------------
 
-type family MapChoices (xs :: f x) :: f Nat where
+type family MapChoices (xs :: f x) = (r :: f Nat) | r -> f where
   MapChoices '[] = '[]
   MapChoices (x ': xs) = Choices x ': MapChoices xs
 
@@ -56,7 +82,7 @@ type family Map2Choices (xss :: f (g x)) :: f (g Nat) where
   Map2Choices (xs ': xss) = MapChoices xs ': Map2Choices xss
 
 
-type family MapFields (xs :: f x) :: f [[Type]] where
+type family MapFields (xs :: f x) = (r :: f [[Type]]) | r -> f where
   MapFields '[] = '[]
   MapFields (x ': xs) = Fields x ': MapFields xs
 
@@ -142,20 +168,22 @@ foldMergeT (x :* xs) = zipSumT x (foldMergeT xs)
 --------------------------------------------------------------------------------
 -- Functions that deal with creating values from types
 
-newtype PF a = PF (ProductType (Fields a))
+newtype PF a = PF (Product (Fields a))
+
+newtype PFT a = PFT (ProductType (Fields a))
 
 pureMapFields :: forall xs . (All MemRep xs) => NP ProductType (MapFields xs)
 pureMapFields = convertPureFields (pureFields @xs)
   where
-    convertPureFields :: NP PF ys -> NP ProductType (MapFields ys)
+    convertPureFields :: NP PFT ys -> NP ProductType (MapFields ys)
     convertPureFields SOP.Nil   = SOP.Nil
-    convertPureFields ((PF x) :* xs) = x :* convertPureFields xs
+    convertPureFields ((PFT x) :* xs) = x :* convertPureFields xs
 
-    pureFields :: (All MemRep zs) => NP PF zs
-    pureFields = cpure_NP (Proxy :: Proxy MemRep) purePF
+    pureFields :: (All MemRep zs) => NP PFT zs
+    pureFields = cpure_NP (Proxy :: Proxy MemRep) purePFT
 
-    purePF :: forall x . (MemRep x) => PF x
-    purePF = PF $ emptyFields @x
+    purePFT :: forall x . (MemRep x) => PFT x
+    purePFT = PFT $ emptyFields @x
 
 newtype NPT a = NPT (NP (ProductType) (MapFields a))
 
@@ -182,6 +210,12 @@ unAppends (Cons x xs) ((PTCons _ ys) :* yss) = (Cons x xs') :* ys'
 unAppends xs          (PTNil :* yss)         = Nil :* (unAppends xs yss)
 unAppends Nil         SOP.Nil                = SOP.Nil
 
+-- This looks terrible, but should be alright?
+-- I suppose I need some injectivity notations somewhere
+toPF :: NP Product (MapFields xs) -> NP PF xs
+toPF SOP.Nil = unsafeCoerce SOP.Nil
+toPF (x :* xs) = unsafeCoerce $ PF (unsafeCoerce x) :* toPF (unsafeCoerce xs)
+
 mapUnAppends :: NS Product (MapAppends xss) -> NP (NP ProductType) xss -> NS (NP Product) xss
 mapUnAppends (Z x)  (y :* _)  = Z (unAppends x y)
 mapUnAppends (S xs) (_ :* ys) = S (mapUnAppends xs ys)
@@ -191,3 +225,40 @@ separateProducts _ SOP.Nil   = SOP.Nil
 separateProducts x (_ :* ys) = x' :* (separateProducts xs ys)
   where
     (x', xs)  = separateProduct x
+
+separateProducts' :: (All KnownNat (MapChoices xs)) => Finite (Products (MapChoices xs)) -> NP PC xs -> NP PC xs
+separateProducts' _ SOP.Nil   = SOP.Nil
+separateProducts' x (_ :* ys) = PC x' :* (separateProducts' xs ys)
+  where
+    (x', xs)  = separateProduct x
+
+class (KnownNat (Sums xs)) => UnSums xs where
+  unSums :: Finite (Sums xs) -> NS Finite xs
+
+instance UnSums '[] where
+  unSums _ = error "help"
+
+instance (KnownNat x, KnownNat (Sums xs), UnSums xs) => UnSums (x ': xs) where
+  unSums x = case separateSum x of
+    Left x' -> Z x'
+    Right x' -> S (unSums x')
+
+newtype PC a = PC (Finite (Choices a))
+
+pureMapChoices :: forall xs . (All MemRep xs) => NP Finite (MapChoices xs)
+pureMapChoices = convertPureChoices (pureChoices @xs)
+  where
+    convertPureChoices :: NP PC ys -> NP Finite (MapChoices ys)
+    convertPureChoices SOP.Nil   = SOP.Nil
+    convertPureChoices ((PC x) :* xs) = x :* convertPureChoices xs
+
+pureChoices :: (All MemRep xs) => NP PC xs
+pureChoices = cpure_NP (Proxy :: Proxy MemRep) purePC
+
+purePC :: forall x . (MemRep x) => PC x
+purePC = PC $ emptyChoices @x
+
+
+zipFromMemRep :: All MemRep xs => NP PC xs -> NP PF xs -> NP I xs
+zipFromMemRep SOP.Nil SOP.Nil = SOP.Nil
+zipFromMemRep (PC c :* cs) (PF f :* fs) = I (fromMemRep c f) :* zipFromMemRep cs fs

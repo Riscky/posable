@@ -72,7 +72,7 @@ class (KnownNat (Choices x)) => MemRep x where
 
 -----------------------------------------------------------------------
 -- GMemRep, the serf of this file
-class (KnownNat (GChoices x)) =>  GMemRep x where
+class (KnownNat (GChoices x)) => GMemRep x where
   type GChoices x :: Nat
   gchoices :: x -> Finite (GChoices x)
 
