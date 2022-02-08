@@ -20,7 +20,7 @@ import Data.Finite
   , separateSum
   , Finite
   )
-import GHC.TypeNats (type (+))
+import GHC.TypeNats (KnownNat, type (+), type (*))
 import Data.Type.MemRep.Generic
 import Data.Type.MemRep.Representation
 
@@ -53,9 +53,9 @@ data Tuple5 a b c d e = T5 a b c d e
 data Unit = Unit
           deriving (GHC.Generic, SOP.Generic, MemRep)
 
--- data MultiSum x y = First x y
---                   | Second y x
---                   deriving (GHC.Generic, SOP.Generic, MemRep)
+data MultiSum x y = First x y
+                  | Second y x
+                  deriving (GHC.Generic, SOP.Generic)
 
 data Direction n e s = North n
                      | East e
@@ -181,6 +181,48 @@ instance (MemRep n, MemRep e, MemRep s) => MemRep (Direction n e s) where
       fs' = unMerge fs (emptyFields @n :* emptyFields @e :* emptyFields @s :* SOP.Nil)
   
   emptyFields = foldMergeT (emptyFields @n :* emptyFields @e :* emptyFields @s :* SOP.Nil)
+
+
+-- Instance for MultiSum, recursively defined
+instance
+    ( KnownNat (Choices (MultiSum a b))
+    , All KnownNat (MapProducts '[ '[Choices a, Choices b], '[Choices b, Choices a]])
+    , All2 KnownNat '[ '[Choices a, Choices b], '[Choices b, Choices a]]
+    , MemRep a
+    , MemRep b) => MemRep (MultiSum a b) where
+  type Choices (MultiSum a b) = Sums (MapProducts '[ '[Choices a, Choices b], '[Choices b, Choices a]])
+  choices (First av bv) = sums $ mapProducts $ map2choices y
+    where
+      y :: NS (NP I) '[ '[a, b], '[b, a]]
+      y = Z (I av :* I bv :* SOP.Nil)
+  choices (Second bv av) = sums $ mapProducts $ map2choices y
+    where
+      y :: NS (NP I) '[ '[a, b], '[b, a]]
+      y = S (Z (I bv :* I av :* SOP.Nil))
+
+  type Fields (MultiSum a b) = FoldMerge (MapAppends '[ '[Fields a, Fields b], '[Fields b, Fields a]])
+  fields (First av bv) = foldMerge
+                            (mapAppendsT $ (pureMap2Fields @'[ '[a, b], '[b, a]]))
+                            (mapAppends (Z (fields av :* fields bv :* SOP.Nil) ::  NS (NP Product) '[ '[Fields a, Fields b], '[Fields b, Fields a]] ))
+  fields (Second bv av) = foldMerge
+                            (mapAppendsT $ (pureMap2Fields @'[ '[a, b], '[b, a]]))
+                            (mapAppends (S (Z (fields bv :* fields av :* SOP.Nil)) ::  NS (NP Product) '[ '[Fields a, Fields b], '[Fields b, Fields a]] ))
+
+  fromMemRep cs fs = case (cs', fs') of
+    (Z nc, Z nf) -> First (fromMemRep ac af) (fromMemRep bc bf)
+      where
+        (ac :* bc :* SOP.Nil) = separateProducts nc (emptyChoices @a :* emptyChoices @b :* SOP.Nil)
+        (af :* bf :* SOP.Nil) = unAppends nf (emptyFields @a :* emptyFields @b :* SOP.Nil)
+    (S (Z ec), S (Z ef)) -> Second (fromMemRep bc bf) (fromMemRep ac af)
+      where
+        (bc :* ac :* SOP.Nil) = separateProducts ec (emptyChoices @b :* emptyChoices @a :* SOP.Nil)
+        (bf :* af :* SOP.Nil) = unAppends ef (emptyFields @b :* emptyFields @a :* SOP.Nil)
+    (_,_) -> error "Choices do not match Fields"
+    where
+      cs' = unSums @'[ Choices a * Choices b, Choices b * Choices a] cs
+      fs' = unMerge fs (mapAppendsT ((emptyFields @a :* emptyFields @b :* SOP.Nil) :* (emptyFields @b :* emptyFields @a :* SOP.Nil) :* SOP.Nil ))
+  
+  emptyFields = foldMergeT $ mapAppendsT $ pureMap2Fields @'[ '[a, b], '[b, a]]
 
 -- Instance for product types (tuples)
 instance (MemRep x, MemRep y) => MemRep (x, y) where
