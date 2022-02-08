@@ -161,36 +161,23 @@ instance (MemRep l, MemRep r) => MemRep (Either l r) where
 
 -- Instance for Direction, recursively defined
 instance (MemRep n, MemRep e, MemRep s) => MemRep (Direction n e s) where
-  type Choices (Direction n e s) = (Choices n + Choices e) + Choices s
-  choices (North nv) = combineSum (Left es)
-    where
-      es :: Finite (Choices n + Choices e)
-      es = combineSum (Left (choices nv))
-  choices (East  ev) = combineSum (Left es)
-    where
-      es :: Finite (Choices n + Choices e)
-      es = combineSum (Right (choices ev))
-  choices (South sv) = combineSum (Right (choices sv))
+  type Choices (Direction n e s) = Sums '[Choices n, Choices e, Choices s]
+  choices (North nv) = sums ((Z (choices nv)) :: NS Finite '[Choices n, Choices e, Choices s])
+  choices (East  ev) = sums ((S (Z (choices ev))) :: NS Finite '[Choices n, Choices e, Choices s])
+  choices (South sv) = sums ((S (S (Z (choices sv)))) :: NS Finite '[Choices n, Choices e, Choices s])
 
   type Fields (Direction n e s) = FoldMerge '[Fields n, Fields e, Fields s]
   fields (North nv) = zipSumLeft  (fields nv)      (zipSumT     (emptyFields @e) (emptyFields @s))
   fields (East  ev) = zipSumRight (emptyFields @n) (zipSumLeft  (fields ev)      (emptyFields @s))
   fields (South sv) = zipSumRight (emptyFields @n) (zipSumRight (emptyFields @e) (fields sv))
 
-  fromMemRep cs fs = case cs'' of
-      Left (Left ncs)  -> case fs' of
-        (Z nfs) -> North (fromMemRep ncs nfs)
-      Left (Right ecs) -> case fs' of
-        (S (Z efs)) -> East  (fromMemRep ecs efs)
-      Right scs        -> case fs' of
-        (S (S (Z sfs))) -> South (fromMemRep scs sfs)
+  fromMemRep cs fs = case (cs', fs') of
+    (Z nc, Z nf) -> North (fromMemRep nc nf)
+    (S (Z ec), S (Z ef)) -> East (fromMemRep ec ef)
+    (S (S (Z sc)), S (S (Z sf))) -> South (fromMemRep sc sf)
+    (_,_) -> error "Choices do not match Fields"
     where
-      cs' :: Either (Finite (Choices n + Choices e)) (Finite (Choices s))
-      cs' = separateSum cs
-      cs'' :: Either (Either (Finite (Choices n)) (Finite (Choices e))) (Finite (Choices s))
-      cs'' = case cs' of
-        Left necs -> Left (separateSum necs)
-        Right x   -> Right x
+      cs' = unSums @'[Choices n, Choices e, Choices s] cs
       fs' = unMerge fs (emptyFields @n :* emptyFields @e :* emptyFields @s :* SOP.Nil)
   
   emptyFields = foldMergeT (emptyFields @n :* emptyFields @e :* emptyFields @s :* SOP.Nil)
