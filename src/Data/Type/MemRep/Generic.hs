@@ -268,3 +268,38 @@ purePC = PC $ emptyChoices @x
 zipFromMemRep :: All MemRep xs => NP PC xs -> NP PF xs -> NP I xs
 zipFromMemRep SOP.Nil SOP.Nil = SOP.Nil
 zipFromMemRep (PC c :* cs) (PF f :* fs) = I (fromMemRep c f) :* zipFromMemRep cs fs
+
+-------------------------------------------------------------------------------
+-- Functions that deal with unmerging Products
+
+unMerge :: Product (FoldMerge xss) -> NP ProductType xss -> NS Product xss
+unMerge _ SOP.Nil = error "Cannot construct empty sum"
+unMerge xs (y :* ys) = case splitHorizontal' xs y (foldMergeT ys) of
+  Left l -> Z l
+  Right r -> S (unMerge r ys)
+
+splitHorizontal' :: Product (Merge l r) -> ProductType l -> ProductType r -> Either (Product l) (Product r)
+-- Base case: both products are of the same length
+splitHorizontal' (Cons x Nil) (PTCons l PTNil) (PTCons _ PTNil) = case splitSum' x l of
+  Left l' -> Left (Cons l' Nil)
+  Right r' -> Right (Cons r' Nil)
+-- Base case: Right is longer
+splitHorizontal' x           PTNil         _             = Right x
+-- Base case: Left is longer
+splitHorizontal' x           _             PTNil         = Left x
+-- unsafeCoerce to prevent having to prove that x :: Sum (l ++ r)
+splitHorizontal' (Cons x xs) (PTCons l ls) (PTCons _ rs) = case splitSum' x l of
+  Left l'-> case splitHorizontal' xs ls rs of
+    Left ls' -> Left (Cons l' ls')
+    Right _  -> error "Cannot split in Right and Left at the same time"
+  Right r' -> case splitHorizontal' xs ls rs of
+    Right rs' -> Right (Cons r' rs')
+    Left _    -> error "Cannot split in Right and Left at the same time"
+
+
+splitSum' :: Sum (l ++ r) -> SumType l -> Either (Sum l) (Sum r)
+splitSum' (Pick x)  (STSucc _ _)  = Left (Pick x)
+splitSum' xs        STZero        = Right xs
+splitSum' (Skip xs) (STSucc _ ls) = case splitSum' xs ls of
+  Left l -> Left (Skip l)
+  Right r -> Right r

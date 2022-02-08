@@ -172,15 +172,18 @@ instance (MemRep n, MemRep e, MemRep s) => MemRep (Direction n e s) where
       es = combineSum (Right (choices ev))
   choices (South sv) = combineSum (Right (choices sv))
 
-  type Fields (Direction n e s) = FoldMerge '[ Fields n, Fields e, Fields s]
+  type Fields (Direction n e s) = FoldMerge '[Fields n, Fields e, Fields s]
   fields (North nv) = zipSumLeft  (fields nv)      (zipSumT     (emptyFields @e) (emptyFields @s))
   fields (East  ev) = zipSumRight (emptyFields @n) (zipSumLeft  (fields ev)      (emptyFields @s))
   fields (South sv) = zipSumRight (emptyFields @n) (zipSumRight (emptyFields @e) (fields sv))
 
   fromMemRep cs fs = case cs'' of
-      Left (Left ncs)  -> North (fromMemRep ncs nfs)
-      Left (Right ecs) -> East  (fromMemRep ecs efs)
-      Right scs        -> South (fromMemRep scs sfs)
+      Left (Left ncs)  -> case fs' of
+        (Z nfs) -> North (fromMemRep ncs nfs)
+      Left (Right ecs) -> case fs' of
+        (S (Z efs)) -> East  (fromMemRep ecs efs)
+      Right scs        -> case fs' of
+        (S (S (Z sfs))) -> South (fromMemRep scs sfs)
     where
       cs' :: Either (Finite (Choices n + Choices e)) (Finite (Choices s))
       cs' = separateSum cs
@@ -188,10 +191,9 @@ instance (MemRep n, MemRep e, MemRep s) => MemRep (Direction n e s) where
       cs'' = case cs' of
         Left necs -> Left (separateSum necs)
         Right x   -> Right x
-      (efs, sfs) = splitHorizontal esfs (emptyFields @e) (emptyFields @s)
-      (nfs, esfs) = splitHorizontal fs (emptyFields @n) (zipSumT (emptyFields @e) (emptyFields @s))
+      fs' = unMerge fs (emptyFields @n :* emptyFields @e :* emptyFields @s :* SOP.Nil)
   
-  emptyFields = zipSumT (emptyFields @n) (zipSumT (emptyFields @e) (emptyFields @s))
+  emptyFields = foldMergeT (emptyFields @n :* emptyFields @e :* emptyFields @s :* SOP.Nil)
 
 -- Instance for product types (tuples)
 instance (MemRep x, MemRep y) => MemRep (x, y) where
