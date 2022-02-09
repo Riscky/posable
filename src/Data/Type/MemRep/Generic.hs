@@ -49,8 +49,12 @@ instance
       cs' = unSums2 @xss cs
       fs' = unMerge2 fs (pureNPProductMapFieldsT @xss)
 
-pureNPProductMapFieldsT :: NP ProductMapFieldsT xss
-pureNPProductMapFieldsT = undefined
+pureNPProductMapFieldsT :: forall xss . (All2 MemRep xss) => NP ProductMapFieldsT xss
+pureNPProductMapFieldsT = convert $ pure2Fields @xss
+
+convert :: NP NPT xss -> NP ProductMapFieldsT xss
+convert SOP.Nil = SOP.Nil
+convert ((NPT x) :* xs) = (ProductMapFieldsT (appendsT x) :* convert xs)
 
 unMerge2 :: Product (FoldMerge (MapAppends (Map2Fields xss))) -> NP ProductMapFieldsT xss -> NS ProductMapFields xss
 unMerge2 _ SOP.Nil = error "Cannot construct empty sum"
@@ -67,6 +71,9 @@ newtype FiniteMapChoices a = FiniteMapChoices (Finite (Products (MapChoices a)))
 newtype ProductMapFields a = ProductMapFields (Product (Appends (MapFields a)))
 
 newtype ProductMapFieldsT a = ProductMapFieldsT (ProductType (Appends (MapFields a)))
+
+unSums3 :: Finite (Sums (MapProducts (Map2Choices xs))) -> NP FiniteMapChoices xs -> NS FiniteMapChoices xs
+unSums3 = undefined
 
 class (KnownNat (Sums (MapProducts (Map2Choices xs)))) => UnSums2 xs where
   unSums2 :: Finite (Sums (MapProducts (Map2Choices xs))) -> NS FiniteMapChoices xs
@@ -214,11 +221,11 @@ pureMap2Fields = convertPure2Fields (pure2Fields @xss)
     convertPure2Fields SOP.Nil   = SOP.Nil
     convertPure2Fields ((NPT x) :* xs) = x :* convertPure2Fields xs
 
-    pure2Fields :: (All2 MemRep zss) => NP NPT zss
-    pure2Fields = cpure_NP (Proxy :: Proxy (All MemRep)) pureNPT
+pure2Fields :: (All2 MemRep zss) => NP NPT zss
+pure2Fields = cpure_NP (Proxy :: Proxy (All MemRep)) pureNPT
 
-    pureNPT :: forall xs . (All MemRep xs) => NPT xs
-    pureNPT = NPT $ pureMapFields @xs
+pureNPT :: forall xs . (All MemRep xs) => NPT xs
+pureNPT = NPT $ pureMapFields @xs
 
 -------------------------------------------------------
 -- Functions to get back to the SOP representation
