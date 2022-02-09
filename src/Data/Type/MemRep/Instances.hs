@@ -38,20 +38,20 @@ import Data.Type.MemRep.Representation
 -- data Try a b = Som a | Oth b
 --              deriving (GHC.Generic, SOP.Generic, MemRep, Show)
 
--- data Tuple1 a = T1 a
---               deriving (GHC.Generic, SOP.Generic, MemRep)
+data Tuple1 a = T1 a
+              deriving (GHC.Generic, SOP.Generic, MemRep)
 
--- data Tuple a b = T a b
---                deriving (GHC.Generic, SOP.Generic, MemRep)
+data Tuple a b = T a b
+               deriving (GHC.Generic, SOP.Generic, MemRep)
 
--- data Tuple3 a b c = T3 a b c
---                   deriving (GHC.Generic, SOP.Generic, MemRep, Show)
+data Tuple3 a b c = T3 a b c
+                  deriving (GHC.Generic, SOP.Generic, MemRep, Show)
 
--- data Tuple5 a b c d e = T5 a b c d e
---                       deriving (GHC.Generic, SOP.Generic, MemRep)
+data Tuple5 a b c d e = T5 a b c d e
+                      deriving (GHC.Generic, SOP.Generic, MemRep)
 
--- data Unit = Unit
---           deriving (GHC.Generic, SOP.Generic, MemRep)
+data Unit = Unit
+          deriving (GHC.Generic, SOP.Generic, MemRep)
 
 data MultiSum x y = First x y
                   | Second y x

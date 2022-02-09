@@ -31,7 +31,6 @@ instance
   , KnownNat (Sums (MapProducts (Map2Choices xss)))
   , All2 KnownNat (Map2Choices xss)
   , All KnownNat (MapProducts (Map2Choices xss))
-  , UnSums2 xss
   ) => GMemRep (SOP I xss) where
 
   type GChoices (SOP I xss) = Sums (MapProducts (Map2Choices xss))
@@ -46,7 +45,7 @@ instance
 
   gfromMemRep cs fs = SOP (comapFromMemRep' cs' fs')
     where
-      cs' = unSums2 @xss cs
+      cs' = unSums3 cs (pureChoices2 @xss)
       fs' = unMerge2 fs (pureNPProductMapFieldsT @xss)
 
 pureNPProductMapFieldsT :: forall xss . (All2 MemRep xss) => NP ProductMapFieldsT xss
@@ -55,6 +54,13 @@ pureNPProductMapFieldsT = convert $ pure2Fields @xss
 convert :: NP NPT xss -> NP ProductMapFieldsT xss
 convert SOP.Nil = SOP.Nil
 convert ((NPT x) :* xs) = (ProductMapFieldsT (appendsT x) :* convert xs)
+
+pureChoices2 :: forall xss . (All2 KnownNat (Map2Choices xss)) => (All2 MemRep xss) => NP FiniteMapChoices xss
+pureChoices2 = convertC $ pure2Choices @xss
+
+convertC :: (All2 KnownNat (Map2Choices xss)) => NP NPC xss -> NP FiniteMapChoices xss
+convertC SOP.Nil = SOP.Nil
+convertC ((NPC x) :* xs) = (FiniteMapChoices (combineProducts x) :* convertC xs)
 
 unMerge2 :: Product (FoldMerge (MapAppends (Map2Fields xss))) -> NP ProductMapFieldsT xss -> NS ProductMapFields xss
 unMerge2 _ SOP.Nil = error "Cannot construct empty sum"
@@ -72,19 +78,11 @@ newtype ProductMapFields a = ProductMapFields (Product (Appends (MapFields a)))
 
 newtype ProductMapFieldsT a = ProductMapFieldsT (ProductType (Appends (MapFields a)))
 
-unSums3 :: Finite (Sums (MapProducts (Map2Choices xs))) -> NP FiniteMapChoices xs -> NS FiniteMapChoices xs
-unSums3 = undefined
-
-class (KnownNat (Sums (MapProducts (Map2Choices xs)))) => UnSums2 xs where
-  unSums2 :: Finite (Sums (MapProducts (Map2Choices xs))) -> NS FiniteMapChoices xs
-
-instance UnSums2 '[] where
-  unSums2 _ = error "help"
-
-instance (KnownNat (Products (MapChoices x)), All KnownNat x, All KnownNat (MapProducts xs), UnSums2 xs) => UnSums2 (x ': xs) where
-  unSums2 x = case separateSum x of
-    Left x' -> Z (FiniteMapChoices x')
-    Right x' -> S (unSums2 x')
+unSums3 :: (All KnownNat (MapProducts (Map2Choices xs))) => Finite (Sums (MapProducts (Map2Choices xs))) -> NP FiniteMapChoices xs -> NS FiniteMapChoices xs
+unSums3 _ SOP.Nil = error "Cannot construct empty sum"
+unSums3 x ((FiniteMapChoices y) :* ys) = case separateSum x of
+  Left x' -> Z (FiniteMapChoices x')
+  Right x' -> S (unSums3 x' ys)
 
 comapFromMemRep' :: (All2 KnownNat (Map2Choices xss), All2 MemRep xss) => NS FiniteMapChoices xss -> NS ProductMapFields xss -> NS (NP I) xss
 comapFromMemRep' (Z cs) (Z fs) = Z (zipFromMemRep cs' fs')
@@ -304,6 +302,13 @@ pureChoices = cpure_NP (Proxy :: Proxy MemRep) purePC
 purePC :: forall x . (MemRep x) => PC x
 purePC = PC $ emptyChoices @x
 
+newtype NPC a = NPC (NP (Finite) (MapChoices a))
+
+pure2Choices :: (All2 MemRep xss) => NP NPC xss
+pure2Choices = cpure_NP (Proxy :: Proxy (All MemRep)) pureNPC
+
+pureNPC :: forall xs . (All MemRep xs) => NPC xs
+pureNPC = NPC $ pureMapChoices @xs
 
 zipFromMemRep :: All MemRep xs => NP PC xs -> NP PF xs -> NP I xs
 zipFromMemRep SOP.Nil SOP.Nil = SOP.Nil
