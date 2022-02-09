@@ -26,45 +26,66 @@ import GHC.TypeLits (KnownNat, type (*), type (+))
 
 
 -- generic instance for n-ary sums (so for everything)
--- instance
---   ( All2 MemRep xss
---   , KnownNat (Sums (MapProducts (Map2Choices xss)))
---   , All2 KnownNat (Map2Choices xss)
---   , All KnownNat (MapProducts (Map2Choices xss))
---   ) => GMemRep (SOP I xss) where
-
---   type GChoices (SOP I xss) = Sums (MapProducts (Map2Choices xss))
---   gchoices x = sums $ mapProducts $ map2choices $ unSOP x
-
---   type GFields (SOP I xss) = FoldMerge (MapAppends (Map2Fields xss))
---   gfields (SOP x)         = foldMerge
---                               (mapAppendsT $ (pureMap2Fields @xss))
---                               (mapAppends (map2Fields x))
-  
---   gemptyFields = foldMergeT $ mapAppendsT $ (pureMap2Fields @xss)
-
--- generic instance for n-ary sums (so for everything)
 instance
-  ( All2 MemRep '[as]
-  , KnownNat (Sums (MapProducts (Map2Choices '[as])))
-  , All2 KnownNat (Map2Choices '[as])
-  , All KnownNat (MapProducts (Map2Choices '[as]))
-  ) => GMemRep (SOP I '[as]) where
+  ( All2 MemRep xss
+  , KnownNat (Sums (MapProducts (Map2Choices xss)))
+  , All2 KnownNat (Map2Choices xss)
+  , All KnownNat (MapProducts (Map2Choices xss))
+  , UnSums2 xss
+  ) => GMemRep (SOP I xss) where
 
-  type GChoices (SOP I '[as]) = Sums (MapProducts (Map2Choices '[as]))
+  type GChoices (SOP I xss) = Sums (MapProducts (Map2Choices xss))
   gchoices x = sums $ mapProducts $ map2choices $ unSOP x
 
-  type GFields (SOP I '[as]) = FoldMerge (MapAppends (Map2Fields '[as]))
+  type GFields (SOP I xss) = FoldMerge (MapAppends (Map2Fields xss))
   gfields (SOP x)         = foldMerge
-                              (mapAppendsT $ (pureMap2Fields @'[as]))
+                              (mapAppendsT $ (pureMap2Fields @xss))
                               (mapAppends (map2Fields x))
   
-  gemptyFields = foldMergeT $ mapAppendsT $ (pureMap2Fields @'[as])
+  gemptyFields = foldMergeT $ mapAppendsT $ (pureMap2Fields @xss)
 
-  gfromMemRep cs fs = SOP $ Z $ zipFromMemRep cs' fs'
+  gfromMemRep cs fs = SOP (comapFromMemRep' cs' fs')
     where
-      cs' = separateProducts' cs (pureChoices @as)
-      fs' = unAppends' fs (pureFields @as)
+      cs' = unSums2 @xss cs
+      fs' = unMerge2 fs (pureNPProductMapFieldsT @xss)
+
+pureNPProductMapFieldsT :: NP ProductMapFieldsT xss
+pureNPProductMapFieldsT = undefined
+
+unMerge2 :: Product (FoldMerge (MapAppends (Map2Fields xss))) -> NP ProductMapFieldsT xss -> NS ProductMapFields xss
+unMerge2 _ SOP.Nil = error "Cannot construct empty sum"
+unMerge2 xs ((ProductMapFieldsT y) :* (ys :: NP ProductMapFieldsT xs)) = case splitHorizontal' xs y (foldMergeT2 @xs ys) of
+  Left l -> Z (ProductMapFields l)
+  Right r -> S (unMerge2 r ys)
+
+foldMergeT2 :: NP ProductMapFieldsT xss -> ProductType (FoldMerge (MapAppends (Map2Fields xss)))
+foldMergeT2 SOP.Nil = PTNil
+foldMergeT2 ((ProductMapFieldsT x) :* xs) = zipSumT x (foldMergeT2 xs)
+
+newtype FiniteMapChoices a = FiniteMapChoices (Finite (Products (MapChoices a)))
+
+newtype ProductMapFields a = ProductMapFields (Product (Appends (MapFields a)))
+
+newtype ProductMapFieldsT a = ProductMapFieldsT (ProductType (Appends (MapFields a)))
+
+class (KnownNat (Sums (MapProducts (Map2Choices xs)))) => UnSums2 xs where
+  unSums2 :: Finite (Sums (MapProducts (Map2Choices xs))) -> NS FiniteMapChoices xs
+
+instance UnSums2 '[] where
+  unSums2 _ = error "help"
+
+instance (KnownNat (Products (MapChoices x)), All KnownNat x, All KnownNat (MapProducts xs), UnSums2 xs) => UnSums2 (x ': xs) where
+  unSums2 x = case separateSum x of
+    Left x' -> Z (FiniteMapChoices x')
+    Right x' -> S (unSums2 x')
+
+comapFromMemRep' :: (All2 KnownNat (Map2Choices xss), All2 MemRep xss) => NS FiniteMapChoices xss -> NS ProductMapFields xss -> NS (NP I) xss
+comapFromMemRep' (Z cs) (Z fs) = Z (zipFromMemRep cs' fs')
+  where
+    cs' = separateProducts'' cs (pureChoices)
+    fs' = unAppends2 fs (pureFields)
+comapFromMemRep' (S cs) (S fs) = S (comapFromMemRep' cs fs)
+comapFromMemRep' _ _  = error "Choices and Fields of unequal length"
 
 
 --------------------------------------------------------------------------------
@@ -222,6 +243,12 @@ unAppends' xs  (PFT ys :* yss) = PF x' :* (unAppends' xs' yss)
   where
     (x', xs') = unConcatP xs ys
 
+unAppends2 :: ProductMapFields xs -> NP PFT xs -> NP PF xs
+unAppends2 (ProductMapFields Nil) SOP.Nil     = SOP.Nil
+unAppends2 (ProductMapFields xs)  (PFT ys :* yss) = PF x' :* (unAppends2 (ProductMapFields xs') yss)
+  where
+    (x', xs') = unConcatP xs ys
+
 mapUnAppends :: NS Product (MapAppends xss) -> NP (NP ProductType) xss -> NS (NP Product) xss
 mapUnAppends (Z x)  (y :* _)  = Z (unAppends x y)
 mapUnAppends (S xs) (_ :* ys) = S (mapUnAppends xs ys)
@@ -235,6 +262,12 @@ separateProducts x (_ :* ys) = x' :* (separateProducts xs ys)
 separateProducts' :: (All KnownNat (MapChoices xs)) => Finite (Products (MapChoices xs)) -> NP PC xs -> NP PC xs
 separateProducts' _ SOP.Nil   = SOP.Nil
 separateProducts' x (_ :* ys) = PC x' :* (separateProducts' xs ys)
+  where
+    (x', xs)  = separateProduct x
+
+separateProducts'' :: (All KnownNat (MapChoices xs)) => FiniteMapChoices xs -> NP PC xs -> NP PC xs
+separateProducts'' _ SOP.Nil   = SOP.Nil
+separateProducts'' (FiniteMapChoices x) (_ :* ys) = PC x' :* (separateProducts'' (FiniteMapChoices xs) ys)
   where
     (x', xs)  = separateProduct x
 
