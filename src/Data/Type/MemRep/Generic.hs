@@ -9,7 +9,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 
-module Data.Type.MemRep.Generic where
+module Data.Type.MemRep.Generic (GMemRep) where
 
 import Generics.SOP hiding (Nil)
 import Generics.SOP.NP hiding (Nil)
@@ -43,10 +43,10 @@ instance
   
   gemptyFields = foldMergeT $ mapAppendsT $ (pureMap2Fields @xss)
 
-  gfromMemRep cs fs = SOP (comapFromMemRep' cs' fs')
+  gfromMemRep cs fs = SOP (comapFromMemRep cs' fs')
     where
-      cs' = unSums3 cs (pureChoices2 @xss)
-      fs' = unMerge2 fs (pureNPProductMapFieldsT @xss)
+      cs' = unSums cs (pureChoices2 @xss)
+      fs' = unMerge fs (pureNPProductMapFieldsT @xss)
 
 pureNPProductMapFieldsT :: forall xss . (All2 MemRep xss) => NP ProductMapFieldsT xss
 pureNPProductMapFieldsT = convert $ pure2Fields @xss
@@ -62,11 +62,11 @@ convertC :: (All2 KnownNat (Map2Choices xss)) => NP NPC xss -> NP FiniteMapChoic
 convertC SOP.Nil = SOP.Nil
 convertC ((NPC x) :* xs) = (FiniteMapChoices (combineProducts x) :* convertC xs)
 
-unMerge2 :: Product (FoldMerge (MapAppends (Map2Fields xss))) -> NP ProductMapFieldsT xss -> NS ProductMapFields xss
-unMerge2 _ SOP.Nil = error "Cannot construct empty sum"
-unMerge2 xs ((ProductMapFieldsT y) :* (ys :: NP ProductMapFieldsT xs)) = case splitHorizontal' xs y (foldMergeT2 @xs ys) of
+unMerge :: Product (FoldMerge (MapAppends (Map2Fields xss))) -> NP ProductMapFieldsT xss -> NS ProductMapFields xss
+unMerge _ SOP.Nil = error "Cannot construct empty sum"
+unMerge xs ((ProductMapFieldsT y) :* (ys :: NP ProductMapFieldsT xs)) = case splitHorizontal xs y (foldMergeT2 @xs ys) of
   Left l -> Z (ProductMapFields l)
-  Right r -> S (unMerge2 r ys)
+  Right r -> S (unMerge r ys)
 
 foldMergeT2 :: NP ProductMapFieldsT xss -> ProductType (FoldMerge (MapAppends (Map2Fields xss)))
 foldMergeT2 SOP.Nil = PTNil
@@ -78,19 +78,19 @@ newtype ProductMapFields a = ProductMapFields (Product (Appends (MapFields a)))
 
 newtype ProductMapFieldsT a = ProductMapFieldsT (ProductType (Appends (MapFields a)))
 
-unSums3 :: (All KnownNat (MapProducts (Map2Choices xs))) => Finite (Sums (MapProducts (Map2Choices xs))) -> NP FiniteMapChoices xs -> NS FiniteMapChoices xs
-unSums3 _ SOP.Nil = error "Cannot construct empty sum"
-unSums3 x ((FiniteMapChoices y) :* ys) = case separateSum x of
+unSums :: (All KnownNat (MapProducts (Map2Choices xs))) => Finite (Sums (MapProducts (Map2Choices xs))) -> NP FiniteMapChoices xs -> NS FiniteMapChoices xs
+unSums _ SOP.Nil = error "Cannot construct empty sum"
+unSums x (_ :* ys) = case separateSum x of
   Left x' -> Z (FiniteMapChoices x')
-  Right x' -> S (unSums3 x' ys)
+  Right x' -> S (unSums x' ys)
 
-comapFromMemRep' :: (All2 KnownNat (Map2Choices xss), All2 MemRep xss) => NS FiniteMapChoices xss -> NS ProductMapFields xss -> NS (NP I) xss
-comapFromMemRep' (Z cs) (Z fs) = Z (zipFromMemRep cs' fs')
+comapFromMemRep :: (All2 KnownNat (Map2Choices xss), All2 MemRep xss) => NS FiniteMapChoices xss -> NS ProductMapFields xss -> NS (NP I) xss
+comapFromMemRep (Z cs) (Z fs) = Z (zipFromMemRep cs' fs')
   where
-    cs' = separateProducts'' cs (pureChoices)
-    fs' = unAppends2 fs (pureFields)
-comapFromMemRep' (S cs) (S fs) = S (comapFromMemRep' cs fs)
-comapFromMemRep' _ _  = error "Choices and Fields of unequal length"
+    cs' = separateProducts cs (pureChoices)
+    fs' = unAppends fs (pureFields)
+comapFromMemRep (S cs) (S fs) = S (comapFromMemRep cs fs)
+comapFromMemRep _ _  = error "Choices and Fields of unequal length"
 
 
 --------------------------------------------------------------------------------
@@ -228,64 +228,23 @@ pureNPT = NPT $ pureMapFields @xs
 -------------------------------------------------------
 -- Functions to get back to the SOP representation
 
-unAppends :: Product (Appends xs) -> NP ProductType xs -> NP Product xs
-unAppends (Cons x xs) ((PTCons _ ys) :* yss) = (Cons x xs') :* ys'
-  where
-    (xs' :* ys') = unAppends xs (ys :* yss)
-unAppends xs          (PTNil :* yss)         = Nil :* (unAppends xs yss)
-unAppends Nil         SOP.Nil                = SOP.Nil
-
-
 unConcatP :: Product (x ++ y) -> ProductType x -> (Product x, Product y)
 unConcatP xs PTNil                  = (Nil, xs)
 unConcatP (Cons x xs) (PTCons _ ts) = (Cons x xs', ys')
   where
     (xs', ys') = unConcatP xs ts
 
-unAppends' :: Product (Appends (MapFields xs)) -> NP PFT xs -> NP PF xs
-unAppends' Nil SOP.Nil     = SOP.Nil
-unAppends' xs  (PFT ys :* yss) = PF x' :* (unAppends' xs' yss)
+unAppends :: ProductMapFields xs -> NP PFT xs -> NP PF xs
+unAppends (ProductMapFields Nil) SOP.Nil     = SOP.Nil
+unAppends (ProductMapFields xs)  (PFT ys :* yss) = PF x' :* (unAppends (ProductMapFields xs') yss)
   where
     (x', xs') = unConcatP xs ys
 
-unAppends2 :: ProductMapFields xs -> NP PFT xs -> NP PF xs
-unAppends2 (ProductMapFields Nil) SOP.Nil     = SOP.Nil
-unAppends2 (ProductMapFields xs)  (PFT ys :* yss) = PF x' :* (unAppends2 (ProductMapFields xs') yss)
-  where
-    (x', xs') = unConcatP xs ys
-
-mapUnAppends :: NS Product (MapAppends xss) -> NP (NP ProductType) xss -> NS (NP Product) xss
-mapUnAppends (Z x)  (y :* _)  = Z (unAppends x y)
-mapUnAppends (S xs) (_ :* ys) = S (mapUnAppends xs ys)
-
-separateProducts :: All KnownNat xs => Finite (Products xs) -> NP Finite xs -> NP Finite xs
+separateProducts :: (All KnownNat (MapChoices xs)) => FiniteMapChoices xs -> NP PC xs -> NP PC xs
 separateProducts _ SOP.Nil   = SOP.Nil
-separateProducts x (_ :* ys) = x' :* (separateProducts xs ys)
+separateProducts (FiniteMapChoices x) (_ :* ys) = PC x' :* (separateProducts (FiniteMapChoices xs) ys)
   where
     (x', xs)  = separateProduct x
-
-separateProducts' :: (All KnownNat (MapChoices xs)) => Finite (Products (MapChoices xs)) -> NP PC xs -> NP PC xs
-separateProducts' _ SOP.Nil   = SOP.Nil
-separateProducts' x (_ :* ys) = PC x' :* (separateProducts' xs ys)
-  where
-    (x', xs)  = separateProduct x
-
-separateProducts'' :: (All KnownNat (MapChoices xs)) => FiniteMapChoices xs -> NP PC xs -> NP PC xs
-separateProducts'' _ SOP.Nil   = SOP.Nil
-separateProducts'' (FiniteMapChoices x) (_ :* ys) = PC x' :* (separateProducts'' (FiniteMapChoices xs) ys)
-  where
-    (x', xs)  = separateProduct x
-
-class (KnownNat (Sums xs)) => UnSums xs where
-  unSums :: Finite (Sums xs) -> NS Finite xs
-
-instance UnSums '[] where
-  unSums _ = error "help"
-
-instance (KnownNat x, KnownNat (Sums xs), UnSums xs) => UnSums (x ': xs) where
-  unSums x = case separateSum x of
-    Left x' -> Z x'
-    Right x' -> S (unSums x')
 
 newtype PC a = PC (Finite (Choices a))
 
@@ -317,34 +276,28 @@ zipFromMemRep (PC c :* cs) (PF f :* fs) = I (fromMemRep c f) :* zipFromMemRep cs
 -------------------------------------------------------------------------------
 -- Functions that deal with unmerging Products
 
-unMerge :: Product (FoldMerge xss) -> NP ProductType xss -> NS Product xss
-unMerge _ SOP.Nil = error "Cannot construct empty sum"
-unMerge xs (y :* ys) = case splitHorizontal' xs y (foldMergeT ys) of
-  Left l -> Z l
-  Right r -> S (unMerge r ys)
-
-splitHorizontal' :: Product (Merge l r) -> ProductType l -> ProductType r -> Either (Product l) (Product r)
+splitHorizontal :: Product (Merge l r) -> ProductType l -> ProductType r -> Either (Product l) (Product r)
 -- Base case: both products are of the same length
-splitHorizontal' (Cons x Nil) (PTCons l PTNil) (PTCons _ PTNil) = case splitSum' x l of
+splitHorizontal (Cons x Nil) (PTCons l PTNil) (PTCons _ PTNil) = case splitSum x l of
   Left l' -> Left (Cons l' Nil)
   Right r' -> Right (Cons r' Nil)
 -- Base case: Right is longer
-splitHorizontal' x           PTNil         _             = Right x
+splitHorizontal x           PTNil         _             = Right x
 -- Base case: Left is longer
-splitHorizontal' x           _             PTNil         = Left x
+splitHorizontal x           _             PTNil         = Left x
 -- unsafeCoerce to prevent having to prove that x :: Sum (l ++ r)
-splitHorizontal' (Cons x xs) (PTCons l ls) (PTCons _ rs) = case splitSum' x l of
-  Left l'-> case splitHorizontal' xs ls rs of
+splitHorizontal (Cons x xs) (PTCons l ls) (PTCons _ rs) = case splitSum x l of
+  Left l'-> case splitHorizontal xs ls rs of
     Left ls' -> Left (Cons l' ls')
     Right _  -> error "Cannot split in Right and Left at the same time"
-  Right r' -> case splitHorizontal' xs ls rs of
+  Right r' -> case splitHorizontal xs ls rs of
     Right rs' -> Right (Cons r' rs')
     Left _    -> error "Cannot split in Right and Left at the same time"
 
 
-splitSum' :: Sum (l ++ r) -> SumType l -> Either (Sum l) (Sum r)
-splitSum' (Pick x)  (STSucc _ _)  = Left (Pick x)
-splitSum' xs        STZero        = Right xs
-splitSum' (Skip xs) (STSucc _ ls) = case splitSum' xs ls of
+splitSum :: Sum (l ++ r) -> SumType l -> Either (Sum l) (Sum r)
+splitSum (Pick x)  (STSucc _ _)  = Left (Pick x)
+splitSum xs        STZero        = Right xs
+splitSum (Skip xs) (STSucc _ ls) = case splitSum xs ls of
   Left l -> Left (Skip l)
   Right r -> Right r

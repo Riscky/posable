@@ -3,17 +3,15 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE DefaultSignatures #-}
 
-module Data.Type.MemRep.MemRep where
+module Data.Type.MemRep.MemRep (MemRep(..), GMemRep(..)) where
 
 import Generics.SOP hiding (Nil)
 import Data.Finite (Finite)
 
-import qualified Generics.SOP as SOP
-
 import Data.Kind (Type)
 
 import GHC.Base (Nat)
-import GHC.TypeLits (KnownNat, natVal)
+import GHC.TypeLits (KnownNat)
 
 
 import Data.Type.MemRep.Representation

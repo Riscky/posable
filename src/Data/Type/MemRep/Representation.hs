@@ -3,7 +3,22 @@
 {-# LANGUAGE StandaloneDeriving #-}
 
 
-module Data.Type.MemRep.Representation where
+module Data.Type.MemRep.Representation
+  ( type (++)
+  , ProductType(..)
+  , concatPT
+  , Product(..)
+  , concatP
+  , SumType(..)
+  , Sum(..)
+  , Merge
+  , FoldMerge
+  , MapAppends
+  , Appends
+  , zipSumT
+  , zipSumLeft
+  , zipSumRight
+) where
 import Generics.SOP (All, All2)
 import Data.Kind
 
@@ -90,7 +105,6 @@ type family FoldMerge (xss :: f (g x)) :: g x where
 ----------------------------------------
 -- Functions on Products and Sums
 
-
 zipSumRight :: ProductType l -> Product r -> Product (Merge l r)
 zipSumRight (PTCons x xs) (Cons y ys) = Cons (takeRight x y) (zipSumRight xs ys)
 zipSumRight PTNil ys = ys
@@ -126,28 +140,3 @@ takeLeft Undef     rs = makeEmpty rs
 takeRight :: SumType l -> Sum r -> Sum (l ++ r)
 takeRight (STSucc _ ls) rs = Skip (takeRight ls rs)
 takeRight STZero        rs = rs
-
-splitHorizontal :: Product (Merge l r) -> ProductType l -> ProductType r -> (Product l, Product r)
-splitHorizontal Nil PTNil         PTNil         = (Nil, Nil)
-splitHorizontal x   PTNil         (PTCons _ _) = (Nil, x)
-splitHorizontal x   (PTCons _ _)  PTNil         = (x, Nil)
-splitHorizontal (Cons x xs) (PTCons l ls) (PTCons r rs) = (Cons l' ls', Cons r' rs')
-  where
-    (l', r') = splitSum x l r
-    (ls', rs') = splitHorizontal xs ls rs
-
-splitSum :: Sum (l ++ r) -> SumType l -> SumType r -> (Sum l, Sum r)
-splitSum (Pick x)  (STSucc _ _)  rs = (Pick x, makeEmpty rs)
-splitSum (Skip xs) (STSucc _ ls) rs = (Skip l', r')
-  where
-    (l', r') = splitSum xs ls rs
-splitSum xs        STZero        _  = (Undef, xs)
-
-splitSum3 :: Sum (x ++ y ++ z) -> SumType x -> SumType y -> SumType z -> (Sum x, Sum y, Sum z)
-splitSum3 (Pick a)  (STSucc _ _)  ys zs = (Pick a, makeEmpty ys, makeEmpty zs)
-splitSum3 as        STZero        ys zs  = (Undef, ys', zs')
-  where
-    (ys', zs') = splitSum as ys zs
-splitSum3 (Skip as) (STSucc _ xs) ys zs = (Skip xs', ys', zs')
-  where
-    (xs', ys', zs') = splitSum3 as xs ys zs
