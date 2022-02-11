@@ -18,6 +18,9 @@ module Data.Type.MemRep.Representation
   , zipSumT
   , zipSumLeft
   , zipSumRight
+  , splitSum
+  , splitProduct
+  , unConcatP
 ) where
 import           Data.Kind
 import           Generics.SOP (All, All2)
@@ -140,3 +143,35 @@ takeLeft Undef     rs = makeEmpty rs
 takeRight :: SumType l -> Sum r -> Sum (l ++ r)
 takeRight (STSucc _ ls) rs = Skip (takeRight ls rs)
 takeRight STZero        rs = rs
+
+splitProduct :: Product (Merge l r) -> ProductType l -> ProductType r -> Either (Product l) (Product r)
+-- Base case: both products are of the same length
+splitProduct (Cons x Nil) (PTCons l PTNil) (PTCons _ PTNil) = case splitSum x l of
+  Left l'  -> Left (Cons l' Nil)
+  Right r' -> Right (Cons r' Nil)
+-- Base case: Right is longer
+splitProduct x           PTNil         _             = Right x
+-- Base case: Left is longer
+splitProduct x           _             PTNil         = Left x
+-- unsafeCoerce to prevent having to prove that x :: Sum (l ++ r)
+splitProduct (Cons x xs) (PTCons l ls) (PTCons _ rs) = case splitSum x l of
+  Left l'-> case splitProduct xs ls rs of
+    Left ls' -> Left (Cons l' ls')
+    Right _  -> error "Cannot split in Right and Left at the same time"
+  Right r' -> case splitProduct xs ls rs of
+    Right rs' -> Right (Cons r' rs')
+    Left _    -> error "Cannot split in Right and Left at the same time"
+
+
+splitSum :: Sum (l ++ r) -> SumType l -> Either (Sum l) (Sum r)
+splitSum (Pick x)  (STSucc _ _)  = Left (Pick x)
+splitSum xs        STZero        = Right xs
+splitSum (Skip xs) (STSucc _ ls) = case splitSum xs ls of
+  Left l  -> Left (Skip l)
+  Right r -> Right r
+
+unConcatP :: Product (x ++ y) -> ProductType x -> (Product x, Product y)
+unConcatP xs PTNil                  = (Nil, xs)
+unConcatP (Cons x xs) (PTCons _ ts) = (Cons x xs', ys')
+  where
+    (xs', ys') = unConcatP xs ts

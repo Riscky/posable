@@ -49,52 +49,7 @@ instance
   gfromMemRep cs fs = SOP (comapFromMemRep cs' fs')
     where
       cs' = unSums cs (pureChoices2 @xss)
-      fs' = unMerge fs (pureNPProductMapFieldsT @xss)
-
-pureNPProductMapFieldsT :: forall xss . (All2 MemRep xss) => NP ProductMapFieldsT xss
-pureNPProductMapFieldsT = convert $ pure2Fields @xss
-
-convert :: NP NPT xss -> NP ProductMapFieldsT xss
-convert SOP.Nil         = SOP.Nil
-convert ((NPT x) :* xs) = (ProductMapFieldsT (appendsT x) :* convert xs)
-
-pureChoices2 :: forall xss . (All2 KnownNat (Map2Choices xss)) => (All2 MemRep xss) => NP FiniteMapChoices xss
-pureChoices2 = convertC $ pure2Choices @xss
-
-convertC :: (All2 KnownNat (Map2Choices xss)) => NP NPC xss -> NP FiniteMapChoices xss
-convertC SOP.Nil         = SOP.Nil
-convertC ((NPC x) :* xs) = (FiniteMapChoices (combineProducts x) :* convertC xs)
-
-unMerge :: Product (FoldMerge (MapAppends (Map2Fields xss))) -> NP ProductMapFieldsT xss -> NS ProductMapFields xss
-unMerge _ SOP.Nil = error "Cannot construct empty sum"
-unMerge xs ((ProductMapFieldsT y) :* (ys :: NP ProductMapFieldsT xs)) = case splitHorizontal xs y (foldMergeT2 @xs ys) of
-  Left l  -> Z (ProductMapFields l)
-  Right r -> S (unMerge r ys)
-
-foldMergeT2 :: NP ProductMapFieldsT xss -> ProductType (FoldMerge (MapAppends (Map2Fields xss)))
-foldMergeT2 SOP.Nil                       = PTNil
-foldMergeT2 ((ProductMapFieldsT x) :* xs) = zipSumT x (foldMergeT2 xs)
-
-newtype FiniteMapChoices a = FiniteMapChoices (Finite (Products (MapChoices a)))
-
-newtype ProductMapFields a = ProductMapFields (Product (Appends (MapFields a)))
-
-newtype ProductMapFieldsT a = ProductMapFieldsT (ProductType (Appends (MapFields a)))
-
-unSums :: (All KnownNat (MapProducts (Map2Choices xs))) => Finite (Sums (MapProducts (Map2Choices xs))) -> NP FiniteMapChoices xs -> NS FiniteMapChoices xs
-unSums _ SOP.Nil = error "Cannot construct empty sum"
-unSums x (_ :* ys) = case separateSum x of
-  Left x'  -> Z (FiniteMapChoices x')
-  Right x' -> S (unSums x' ys)
-
-comapFromMemRep :: (All2 KnownNat (Map2Choices xss), All2 MemRep xss) => NS FiniteMapChoices xss -> NS ProductMapFields xss -> NS (NP I) xss
-comapFromMemRep (Z cs) (Z fs) = Z (zipFromMemRep cs' fs')
-  where
-    cs' = separateProducts cs (pureChoices)
-    fs' = unAppends fs (pureFields)
-comapFromMemRep (S cs) (S fs) = S (comapFromMemRep cs fs)
-comapFromMemRep _ _  = error "Choices and Fields of unequal length"
-
+      fs' = unMerge fs (pureAppendsFields @xss)
 
 --------------------------------------------------------------------------------
 -- Supporting types and classes
@@ -194,113 +149,125 @@ foldMergeT SOP.Nil   = PTNil
 foldMergeT (x :* xs) = zipSumT x (foldMergeT xs)
 
 --------------------------------------------------------------------------------
--- Functions that deal with creating values from types
+-- Functions that deal with creating Products from types
 
-newtype PF a = PF (Product (Fields a))
+newtype ProductFields a = ProductFields (Product (Fields a))
 
-newtype PFT a = PFT (ProductType (Fields a))
+newtype ProductFieldsT a = ProductFieldsT (ProductType (Fields a))
+
+newtype ProductAppendsFields a = ProductAppendsFields (Product (Appends (MapFields a)))
+
+newtype ProductAppendsFieldsT a = ProductAppendsFieldsT (ProductType (Appends (MapFields a)))
+
+newtype ProductMapFieldsT a = ProductMapFieldsT (NP (ProductType) (MapFields a))
 
 pureMapFields :: forall xs . (All MemRep xs) => NP ProductType (MapFields xs)
-pureMapFields = convertPureFields (pureFields @xs)
+pureMapFields = convert $ pureFields @xs
   where
-    convertPureFields :: NP PFT ys -> NP ProductType (MapFields ys)
-    convertPureFields SOP.Nil         = SOP.Nil
-    convertPureFields ((PFT x) :* xs) = x :* convertPureFields xs
+    convert :: NP ProductFieldsT ys -> NP ProductType (MapFields ys)
+    convert SOP.Nil         = SOP.Nil
+    convert ((ProductFieldsT x) :* xs) = x :* convert xs
 
-pureFields :: (All MemRep zs) => NP PFT zs
-pureFields = cpure_NP (Proxy :: Proxy MemRep) purePFT
-
-purePFT :: forall x . (MemRep x) => PFT x
-purePFT = PFT $ emptyFields @x
-
-newtype NPT a = NPT (NP (ProductType) (MapFields a))
+pureFields :: (All MemRep xs) => NP ProductFieldsT xs
+pureFields = cpure_NP (Proxy :: Proxy MemRep) pureProductFields
+  where
+    pureProductFields :: forall x . (MemRep x) => ProductFieldsT x
+    pureProductFields = ProductFieldsT $ emptyFields @x
 
 pureMap2Fields :: forall xss . (All2 MemRep xss) => NP (NP ProductType) (Map2Fields xss)
-pureMap2Fields = convertPure2Fields (pure2Fields @xss)
+pureMap2Fields = convert $ pure2Fields @xss
   where
-    convertPure2Fields :: NP NPT yss -> NP (NP ProductType) (Map2Fields yss)
-    convertPure2Fields SOP.Nil         = SOP.Nil
-    convertPure2Fields ((NPT x) :* xs) = x :* convertPure2Fields xs
+    convert :: NP ProductMapFieldsT yss -> NP (NP ProductType) (Map2Fields yss)
+    convert SOP.Nil         = SOP.Nil
+    convert ((ProductMapFieldsT x) :* xs) = x :* convert xs
 
-pure2Fields :: (All2 MemRep zss) => NP NPT zss
-pure2Fields = cpure_NP (Proxy :: Proxy (All MemRep)) pureNPT
+pure2Fields :: (All2 MemRep zss) => NP ProductMapFieldsT zss
+pure2Fields = cpure_NP (Proxy :: Proxy (All MemRep)) pureProductMapFieldsT
+  where
+    pureProductMapFieldsT :: forall xs . (All MemRep xs) => ProductMapFieldsT xs
+    pureProductMapFieldsT = ProductMapFieldsT $ pureMapFields @xs
 
-pureNPT :: forall xs . (All MemRep xs) => NPT xs
-pureNPT = NPT $ pureMapFields @xs
+pureAppendsFields :: forall xss . (All2 MemRep xss) => NP ProductAppendsFieldsT xss
+pureAppendsFields = convert $ pure2Fields @xss
+  where
+    convert :: NP ProductMapFieldsT yss -> NP ProductAppendsFieldsT yss
+    convert SOP.Nil         = SOP.Nil
+    convert ((ProductMapFieldsT x) :* xs) = (ProductAppendsFieldsT (appendsT x) :* convert xs)
+
+--------------------------------------------------------------------------------
+-- Functions that deal with creating Choices from types
+
+newtype FChoices a = FChoices (Finite (Choices a))
+
+newtype ProductsMapChoices a = ProductsMapChoices (Finite (Products (MapChoices a)))
+
+newtype FMapChoices a = FMapChoices (NP (Finite) (MapChoices a))
+
+pureChoices2 :: forall xss . (All2 KnownNat (Map2Choices xss)) => (All2 MemRep xss) => NP ProductsMapChoices xss
+pureChoices2 = convert $ pure2Choices @xss
+  where
+    convert :: (All2 KnownNat (Map2Choices yss)) => NP FMapChoices yss -> NP ProductsMapChoices yss
+    convert SOP.Nil         = SOP.Nil
+    convert ((FMapChoices x) :* xs) = (ProductsMapChoices (combineProducts x) :* convert xs)
+
+pureMapChoices :: forall xs . (All MemRep xs) => NP Finite (MapChoices xs)
+pureMapChoices = convert $ pureChoices @xs
+  where
+    convert :: NP FChoices ys -> NP Finite (MapChoices ys)
+    convert SOP.Nil        = SOP.Nil
+    convert ((FChoices x) :* xs) = x :* convert xs
+    
+pureChoices :: (All MemRep xs) => NP FChoices xs
+pureChoices = cpure_NP (Proxy :: Proxy MemRep) pureFChoices
+  where
+    pureFChoices :: forall x . (MemRep x) => FChoices x
+    pureFChoices = FChoices $ emptyChoices @x
+
+pure2Choices :: (All2 MemRep xss) => NP FMapChoices xss
+pure2Choices = cpure_NP (Proxy :: Proxy (All MemRep)) pureFMapChoices
+  where
+    pureFMapChoices :: forall xs . (All MemRep xs) => FMapChoices xs
+    pureFMapChoices = FMapChoices $ pureMapChoices @xs
 
 -------------------------------------------------------
 -- Functions to get back to the SOP representation
 
-unConcatP :: Product (x ++ y) -> ProductType x -> (Product x, Product y)
-unConcatP xs PTNil                  = (Nil, xs)
-unConcatP (Cons x xs) (PTCons _ ts) = (Cons x xs', ys')
-  where
-    (xs', ys') = unConcatP xs ts
-
-unAppends :: ProductMapFields xs -> NP PFT xs -> NP PF xs
-unAppends (ProductMapFields Nil) SOP.Nil     = SOP.Nil
-unAppends (ProductMapFields xs)  (PFT ys :* yss) = PF x' :* (unAppends (ProductMapFields xs') yss)
+unAppends :: ProductAppendsFields xs -> NP ProductFieldsT xs -> NP ProductFields xs
+unAppends (ProductAppendsFields Nil) SOP.Nil     = SOP.Nil
+unAppends (ProductAppendsFields xs)  (ProductFieldsT ys :* yss) = ProductFields x' :* (unAppends (ProductAppendsFields xs') yss)
   where
     (x', xs') = unConcatP xs ys
 
-separateProducts :: (All KnownNat (MapChoices xs)) => FiniteMapChoices xs -> NP PC xs -> NP PC xs
+separateProducts :: (All KnownNat (MapChoices xs)) => ProductsMapChoices xs -> NP FChoices xs -> NP FChoices xs
 separateProducts _ SOP.Nil   = SOP.Nil
-separateProducts (FiniteMapChoices x) (_ :* ys) = PC x' :* (separateProducts (FiniteMapChoices xs) ys)
+separateProducts (ProductsMapChoices x) (_ :* ys) = FChoices x' :* (separateProducts (ProductsMapChoices xs) ys)
   where
     (x', xs)  = separateProduct x
 
-newtype PC a = PC (Finite (Choices a))
-
-pureMapChoices :: forall xs . (All MemRep xs) => NP Finite (MapChoices xs)
-pureMapChoices = convertPureChoices (pureChoices @xs)
-  where
-    convertPureChoices :: NP PC ys -> NP Finite (MapChoices ys)
-    convertPureChoices SOP.Nil        = SOP.Nil
-    convertPureChoices ((PC x) :* xs) = x :* convertPureChoices xs
-
-pureChoices :: (All MemRep xs) => NP PC xs
-pureChoices = cpure_NP (Proxy :: Proxy MemRep) purePC
-
-purePC :: forall x . (MemRep x) => PC x
-purePC = PC $ emptyChoices @x
-
-newtype NPC a = NPC (NP (Finite) (MapChoices a))
-
-pure2Choices :: (All2 MemRep xss) => NP NPC xss
-pure2Choices = cpure_NP (Proxy :: Proxy (All MemRep)) pureNPC
-
-pureNPC :: forall xs . (All MemRep xs) => NPC xs
-pureNPC = NPC $ pureMapChoices @xs
-
-zipFromMemRep :: All MemRep xs => NP PC xs -> NP PF xs -> NP I xs
+zipFromMemRep :: All MemRep xs => NP FChoices xs -> NP ProductFields xs -> NP I xs
 zipFromMemRep SOP.Nil SOP.Nil = SOP.Nil
-zipFromMemRep (PC c :* cs) (PF f :* fs) = I (fromMemRep c f) :* zipFromMemRep cs fs
+zipFromMemRep (FChoices c :* cs) (ProductFields f :* fs) = I (fromMemRep c f) :* zipFromMemRep cs fs
 
--------------------------------------------------------------------------------
--- Functions that deal with unmerging Products
+unMerge :: Product (FoldMerge (MapAppends (Map2Fields xss))) -> NP ProductAppendsFieldsT xss -> NS ProductAppendsFields xss
+unMerge _ SOP.Nil = error "Cannot construct empty sum"
+unMerge xs ((ProductAppendsFieldsT y) :* (ys :: NP ProductAppendsFieldsT xs)) = case splitProduct xs y (foldMergeT2 @xs ys) of
+  Left l  -> Z (ProductAppendsFields l)
+  Right r -> S (unMerge r ys)
 
-splitHorizontal :: Product (Merge l r) -> ProductType l -> ProductType r -> Either (Product l) (Product r)
--- Base case: both products are of the same length
-splitHorizontal (Cons x Nil) (PTCons l PTNil) (PTCons _ PTNil) = case splitSum x l of
-  Left l'  -> Left (Cons l' Nil)
-  Right r' -> Right (Cons r' Nil)
--- Base case: Right is longer
-splitHorizontal x           PTNil         _             = Right x
--- Base case: Left is longer
-splitHorizontal x           _             PTNil         = Left x
--- unsafeCoerce to prevent having to prove that x :: Sum (l ++ r)
-splitHorizontal (Cons x xs) (PTCons l ls) (PTCons _ rs) = case splitSum x l of
-  Left l'-> case splitHorizontal xs ls rs of
-    Left ls' -> Left (Cons l' ls')
-    Right _  -> error "Cannot split in Right and Left at the same time"
-  Right r' -> case splitHorizontal xs ls rs of
-    Right rs' -> Right (Cons r' rs')
-    Left _    -> error "Cannot split in Right and Left at the same time"
+foldMergeT2 :: NP ProductAppendsFieldsT xss -> ProductType (FoldMerge (MapAppends (Map2Fields xss)))
+foldMergeT2 SOP.Nil                       = PTNil
+foldMergeT2 ((ProductAppendsFieldsT x) :* xs) = zipSumT x (foldMergeT2 xs)
 
+unSums :: (All KnownNat (MapProducts (Map2Choices xs))) => Finite (Sums (MapProducts (Map2Choices xs))) -> NP ProductsMapChoices xs -> NS ProductsMapChoices xs
+unSums _ SOP.Nil = error "Cannot construct empty sum"
+unSums x (_ :* ys) = case separateSum x of
+  Left x'  -> Z (ProductsMapChoices x')
+  Right x' -> S (unSums x' ys)
 
-splitSum :: Sum (l ++ r) -> SumType l -> Either (Sum l) (Sum r)
-splitSum (Pick x)  (STSucc _ _)  = Left (Pick x)
-splitSum xs        STZero        = Right xs
-splitSum (Skip xs) (STSucc _ ls) = case splitSum xs ls of
-  Left l  -> Left (Skip l)
-  Right r -> Right r
+comapFromMemRep :: (All2 KnownNat (Map2Choices xss), All2 MemRep xss) => NS ProductsMapChoices xss -> NS ProductAppendsFields xss -> NS (NP I) xss
+comapFromMemRep (Z cs) (Z fs) = Z (zipFromMemRep cs' fs')
+  where
+    cs' = separateProducts cs (pureChoices)
+    fs' = unAppends fs (pureFields)
+comapFromMemRep (S cs) (S fs) = S (comapFromMemRep cs fs)
+comapFromMemRep _ _  = error "Choices and Fields of unequal length"
