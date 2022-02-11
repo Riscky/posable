@@ -12,6 +12,7 @@ jobs:
       with:
         path: |
           .stack-work
+          ~/.local/bin/stylish-haskell
         key: ${{ hashFiles('stack.yaml.lock') }}
         restore-keys: |
           ${{ runner.os }}-stack
