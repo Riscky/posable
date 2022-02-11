@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Main where
 
@@ -7,6 +8,7 @@ import Test.Tasty.HUnit ( testCase, (@?=) )
 import Data.Type.MemRep.MemRep
 import Data.Type.MemRep.Representation
 import Data.Type.MemRep.Instances ()
+import Test.Tasty.QuickCheck
 
 main :: IO ()
 main = defaultMain tests
@@ -49,6 +51,14 @@ tests = testGroup "Test Choices and Fields of basic data types"
     , testCase "choices Either (,) (,)" $
         fields eitherOfTuples @?= Cons (Pick 1) (Cons (Pick 3.4) Nil)
     ]
+  , testGroup "QuickCheck"
+    [ testProperty "Either Int Float" $
+        propInjectivity @(Either Int Float)
+    , testProperty "Either Either Tuple" $
+        propInjectivity @(Either (Either Int Float) (Float, Int))
+    , testProperty "Long tuple" $
+        propInjectivity @(Int, Float, Word, Float, Char)
+    ]
   ]
 
 nestedMaybe :: Maybe (Maybe Float)
@@ -62,3 +72,6 @@ tupleOfEithers = (Left 1, Right 2.3)
 
 eitherOfTuples :: Either (Int, Float) (Float, Int)
 eitherOfTuples = Left (1,3.4)
+
+propInjectivity :: (MemRep a, Arbitrary a, Eq a) => a -> Bool
+propInjectivity x = fromMemRep (choices x) (fields x) == x
