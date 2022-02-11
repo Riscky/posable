@@ -58,6 +58,8 @@ tests = testGroup "Test Choices and Fields of basic data types"
         propInjectivity @(Either (Either Int Float) (Float, Int))
     , testProperty "Long tuple" $
         propInjectivity @(Int, Float, Word, Float, Char)
+    , testProperty "Unit" $
+        propInjectivity @()
     ]
   ]
 

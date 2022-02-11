@@ -28,7 +28,6 @@ import           GHC.Base                        (Nat)
 import           GHC.TypeLits                    (KnownNat, type (*), type (+))
 
 
--- generic instance for n-ary sums (so for everything)
 instance
   ( All2 MemRep xss
   , KnownNat (Sums (MapProducts (Map2Choices xss)))

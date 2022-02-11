@@ -25,6 +25,8 @@ module Data.Type.MemRep.Representation
 import           Data.Kind
 import           Generics.SOP (All, All2)
 
+import Unsafe.Coerce (unsafeCoerce)
+
 infixr 5 ++
 type family (++) (xs :: [k]) (ys :: [k]) :: [k] where
     '[]       ++ ys = ys
@@ -39,8 +41,8 @@ data ProductType :: [[Type]] -> Type where
   PTCons :: SumType x -> ProductType xs -> ProductType (x ': xs)
 
 instance (All2 Show xs) => Show (ProductType xs) where
-  show PTNil         = "[]"
-  show (PTCons a as) = show a ++ " : " ++ show as
+  show PTNil         = "PTNil"
+  show (PTCons a as) = "PTCons " ++ show a ++ " (" ++ show as ++ ")"
 
 concatPT :: ProductType x -> ProductType y -> ProductType (x ++ y)
 concatPT PTNil ys         = ys
@@ -54,8 +56,8 @@ data Product :: [[Type]] -> Type where
 deriving instance (All2 Eq xs) => Eq (Product xs)
 
 instance (All2 Show xs) => Show (Product xs) where
-  show Nil         = "[]"
-  show (Cons a as) = show a ++ " : " ++ show as
+  show Nil         = "Nil"
+  show (Cons a as) = "Cons " ++ show a ++ " (" ++ show as ++ ")"
 
 concatP :: Product x -> Product y -> Product (x ++ y)
 concatP Nil         ys = ys
@@ -76,14 +78,13 @@ data Sum :: [Type] -> Type where
 deriving instance (All Eq xs) => Eq (Sum xs)
 
 instance (All Show x) => Show (SumType x) where
-  show (STSucc x STZero) = show x
-  show (STSucc x xs)     = show x ++ "|" ++ show xs
-  show STZero            = "empty"
+  show (STSucc x xs)     = "STSucc " ++ show x ++ " (" ++ show xs ++ ")"
+  show STZero            = "STZero"
 
 instance (All Show x) => Show (Sum x) where
-  show (Pick x) = show x
-  show (Skip x) = show x
-  show Undef    = "undefined"
+  show (Pick x) = "Pick " ++ show x
+  show (Skip x) = "Skip " ++ show x
+  show Undef    = "Undef"
 
 ----------------------------------------
 -- Type functions on lists
@@ -144,31 +145,45 @@ takeRight :: SumType l -> Sum r -> Sum (l ++ r)
 takeRight (STSucc _ ls) rs = Skip (takeRight ls rs)
 takeRight STZero        rs = rs
 
+splitProductRight :: Product (Merge l r) -> ProductType l -> ProductType r -> Product r
+splitProductRight xs PTNil _ = xs
+splitProductRight xs _ PTNil = Nil
+splitProductRight (Cons x xs) (PTCons l ls) (PTCons r rs) = Cons (splitSumRight x l r) (splitProductRight xs ls rs)
+
+splitProductLeft :: Product (Merge l r) -> ProductType l -> ProductType r -> Product l
+splitProductLeft xs PTNil _ = Nil
+splitProductLeft xs _ PTNil = xs
+splitProductLeft (Cons x xs) (PTCons l ls) (PTCons r rs) = Cons (splitSumLeft x l r) (splitProductLeft xs ls rs)
+
 splitProduct :: Product (Merge l r) -> ProductType l -> ProductType r -> Either (Product l) (Product r)
--- Base case: both products are of the same length
-splitProduct (Cons x Nil) (PTCons l PTNil) (PTCons _ PTNil) = case splitSum x l of
-  Left l'  -> Left (Cons l' Nil)
-  Right r' -> Right (Cons r' Nil)
--- Base case: Right is longer
-splitProduct x           PTNil         _             = Right x
--- Base case: Left is longer
-splitProduct x           _             PTNil         = Left x
--- unsafeCoerce to prevent having to prove that x :: Sum (l ++ r)
-splitProduct (Cons x xs) (PTCons l ls) (PTCons _ rs) = case splitSum x l of
-  Left l'-> case splitProduct xs ls rs of
-    Left ls' -> Left (Cons l' ls')
-    Right _  -> error "Cannot split in Right and Left at the same time"
-  Right r' -> case splitProduct xs ls rs of
-    Right rs' -> Right (Cons r' rs')
-    Left _    -> error "Cannot split in Right and Left at the same time"
+splitProduct (Cons x xs) (PTCons l ls) (PTCons r rs) = case splitSum x l r of
+  Left l'-> Left $ Cons l' $ splitProductLeft xs ls rs
+  Right r' -> Right $ Cons r' $ splitProductRight xs ls rs
+splitProduct (Cons x xs) PTNil (PTCons r rs) = case splitSum x STZero r of
+  Left _ -> Left Nil
+  Right r' -> Right $ Cons r' $ splitProductRight xs PTNil rs
+-- unsafe to prevent proving (x ++ '[]) ~ x
+splitProduct (Cons x xs) (PTCons l ls) PTNil = case splitSum (unsafeCoerce x) l STZero of
+  Left l' -> Left $ Cons l' $ splitProductLeft xs ls PTNil
+  Right _ -> Right Nil
+splitProduct Nil PTNil PTNil = error "No clue what to do here"
 
-
-splitSum :: Sum (l ++ r) -> SumType l -> Either (Sum l) (Sum r)
-splitSum (Pick x)  (STSucc _ _)  = Left (Pick x)
-splitSum xs        STZero        = Right xs
-splitSum (Skip xs) (STSucc _ ls) = case splitSum xs ls of
+splitSum :: Sum (l ++ r) -> SumType l -> SumType r -> Either (Sum l) (Sum r)
+splitSum (Pick x)  (STSucc _ _)  _ = Left (Pick x)
+splitSum xs        STZero        _ = Right xs
+splitSum (Skip xs) (STSucc _ ls) rs = case splitSum xs ls rs of
   Left l  -> Left (Skip l)
   Right r -> Right r
+
+splitSumRight :: Sum (l ++ r) -> SumType l -> SumType r -> Sum r
+splitSumRight xs        STZero        _ = xs
+splitSumRight (Pick x)  (STSucc _ _)  _ = error "Value not in Right"
+splitSumRight (Skip xs) (STSucc _ ls) rs = splitSumRight xs ls rs
+
+splitSumLeft :: Sum (l ++ r) -> SumType l -> SumType r -> Sum l
+splitSumLeft (Pick x)  (STSucc _ _) _  = Pick x
+splitSumLeft _        STZero       _  = Undef
+splitSumLeft (Skip xs) (STSucc _ ls) rs = Skip $ splitSumLeft xs ls rs
 
 unConcatP :: Product (x ++ y) -> ProductType x -> (Product x, Product y)
 unConcatP xs PTNil                  = (Nil, xs)
