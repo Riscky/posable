@@ -1,12 +1,11 @@
 {-# LANGUAGE DeriveAnyClass       #-}
-{-# LANGUAGE DeriveGeneric        #-}
 {-# LANGUAGE StandaloneDeriving   #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 -- This is needed to derive MemRep for tuples of size more then 4
-{-# OPTIONS_GHC -fconstraint-solver-iterations=6 #-}
+{-# OPTIONS_GHC -fconstraint-solver-iterations=8 #-}
 
 module Data.Type.MemRep.Instances (MemRep) where
 
@@ -14,62 +13,26 @@ import           Data.Int                        (Int16, Int8)
 import           Data.Type.MemRep.Generic        ()
 import           Data.Type.MemRep.MemRep
 import           Data.Type.MemRep.Representation
-import qualified GHC.Generics                    as GHC
-import qualified Generics.SOP                    as SOP
 
 -----------------------------------------------------------------------
--- Instances for common Haskell datatypes
+-- Instances for common nonrecursive Haskell datatypes
 deriving instance MemRep Bool
 deriving instance MemRep x => MemRep (Maybe x)
 deriving instance (MemRep l, MemRep r) => MemRep (Either l r)
+deriving instance MemRep Ordering
+
 deriving instance MemRep ()
 deriving instance (MemRep a, MemRep b) => MemRep (a,b)
-
-
------------------------------------------------------------------------
--- Instances for some made up datatypes
-data Try a b = Som a | Oth b
-             deriving (GHC.Generic, SOP.Generic, MemRep, Show)
-
-data Tuple1 a = T1 a
-              deriving (GHC.Generic, SOP.Generic, MemRep)
-
-data Tuple a b = T a b
-               deriving (GHC.Generic, SOP.Generic, MemRep)
-
-data Tuple3 a b c = T3 a b c
-                  deriving (GHC.Generic, SOP.Generic, MemRep, Show)
-
-data Tuple5 a b c d e = T5 a b c d e
-                      deriving (GHC.Generic, SOP.Generic, MemRep)
-
-data Unit = Unit
-          deriving (GHC.Generic, SOP.Generic, MemRep)
-
-data MultiSum x y = First x y
-                  | Second y x
-                  deriving (GHC.Generic, SOP.Generic, MemRep, Show)
-
-data Direction n e s = North n
-                     | East e
-                     | South s
-                     deriving (Show)
+deriving instance (MemRep a, MemRep b, MemRep c) => MemRep (a,b,c)
+deriving instance (MemRep a, MemRep b, MemRep c, MemRep d) => MemRep (a,b,c,d)
+deriving instance (MemRep a, MemRep b, MemRep c, MemRep d, MemRep e) => MemRep (a,b,c,d,e)
+deriving instance (MemRep a, MemRep b, MemRep c, MemRep d, MemRep e, MemRep f) => MemRep (a,b,c,d,e,f)
+deriving instance (MemRep a, MemRep b, MemRep c, MemRep d, MemRep e, MemRep f, MemRep g) => MemRep (a,b,c,d,e,f,g)
+deriving instance (MemRep a, MemRep b, MemRep c, MemRep d, MemRep e, MemRep f, MemRep g, MemRep h) => MemRep (a,b,c,d,e,f,g,h)
 
 -----------------------------------------------------------------------
 -- Instances of MemRep for machine types
 
--- Sadly, this definition due to overlapping instances:
-
--- instance Base x => MemRep x where
---   type Choices x = '[]
---   choices x = Nil
-
---   type Fields x = '[Sum '[x]]
---   mtfields x = Cons (Pick x) Nil
-
--- Instead, we have to do with a seperate definition per base type, which leads
--- to a horrible amount of boilerplate.
--- This is fixable with some Template Haskell, but let's not go there now.
 instance MemRep Int where
   type Choices Int = 1
   choices _ = 0
@@ -125,3 +88,32 @@ instance MemRep Int16 where
   widths = [16]
 
   emptyFields = PTCons (STSucc 0 STZero) PTNil
+
+instance MemRep Char where
+    type Choices Char = 1
+    choices _ = 0
+  
+    type Fields Char = '[ '[Char]]
+    fields x = Cons (Pick x) Nil
+  
+    fromMemRep 0 (Cons (Pick x) Nil) = x
+    fromMemRep _ _                   = error "index out of range"
+  
+    widths = [32]
+  
+    emptyFields = PTCons (STSucc '_' STZero) PTNil
+
+instance MemRep Word where
+  type Choices Word = 1
+  choices _ = 0
+
+  type Fields Word = '[ '[Word]]
+  fields x = Cons (Pick x) Nil
+
+  fromMemRep 0 (Cons (Pick x) Nil) = x
+  fromMemRep _ _                   = error "index out of range"
+
+  widths = [8]
+
+  emptyFields = PTCons (STSucc 0 STZero) PTNil
+  
