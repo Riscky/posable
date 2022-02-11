@@ -7,6 +7,15 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
+    - name: "Cache Stack files"
+      uses: actions/cache@v2.1.7
+      with:
+        path: |
+          .stack-work
+        key: ${{ hashFiles('stack.yaml.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-stack
+
     - name: "Install Stack"
       run: "sudo apt-get -y install haskell-stack"
 
