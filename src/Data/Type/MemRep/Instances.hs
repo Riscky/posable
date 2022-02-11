@@ -1,7 +1,7 @@
+{-# LANGUAGE DeriveAnyClass       #-}
+{-# LANGUAGE DeriveGeneric        #-}
+{-# LANGUAGE StandaloneDeriving   #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
@@ -10,12 +10,12 @@
 
 module Data.Type.MemRep.Instances (MemRep) where
 
-import qualified GHC.Generics as GHC
-import Data.Int (Int8, Int16)
-import qualified Generics.SOP as SOP
-import Data.Type.MemRep.MemRep
-import Data.Type.MemRep.Generic ()
-import Data.Type.MemRep.Representation
+import           Data.Int                        (Int16, Int8)
+import           Data.Type.MemRep.Generic        ()
+import           Data.Type.MemRep.MemRep
+import           Data.Type.MemRep.Representation
+import qualified GHC.Generics                    as GHC
+import qualified Generics.SOP                    as SOP
 
 -----------------------------------------------------------------------
 -- Instances for common Haskell datatypes
@@ -78,7 +78,7 @@ instance MemRep Int where
   fields x = Cons (Pick x) Nil
 
   fromMemRep 0 (Cons (Pick x) Nil) = x
-  fromMemRep _ _ = error "index out of range"
+  fromMemRep _ _                   = error "index out of range"
 
   widths = [32]
 
@@ -92,7 +92,7 @@ instance MemRep Float where
   fields x = Cons (Pick x) Nil
 
   fromMemRep 0 (Cons (Pick x) Nil) = x
-  fromMemRep _ _ = error "index out of range"
+  fromMemRep _ _                   = error "index out of range"
 
   widths = [32]
 
@@ -106,7 +106,7 @@ instance MemRep Int8 where
   fields x = Cons (Pick x) Nil
 
   fromMemRep 0 (Cons (Pick x) Nil) = x
-  fromMemRep _ _ = error "index out of range"
+  fromMemRep _ _                   = error "index out of range"
 
   widths = [8]
 
@@ -120,7 +120,7 @@ instance MemRep Int16 where
   fields x = Cons (Pick x) Nil
 
   fromMemRep 0 (Cons (Pick x) Nil) = x
-  fromMemRep _ _ = error "index out of range"
+  fromMemRep _ _                   = error "index out of range"
 
   widths = [16]
 

@@ -1,20 +1,20 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE AllowAmbiguousTypes  #-}
+{-# LANGUAGE DefaultSignatures    #-}
+{-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE DefaultSignatures #-}
 
 module Data.Type.MemRep.MemRep (MemRep(..), GMemRep(..)) where
 
-import Generics.SOP hiding (Nil)
-import Data.Finite (Finite)
+import           Data.Finite                     (Finite)
+import           Generics.SOP                    hiding (Nil)
 
-import Data.Kind (Type)
+import           Data.Kind                       (Type)
 
-import GHC.Base (Nat)
-import GHC.TypeLits (KnownNat)
+import           GHC.Base                        (Nat)
+import           GHC.TypeLits                    (KnownNat)
 
 
-import Data.Type.MemRep.Representation
+import           Data.Type.MemRep.Representation
 
 -----------------------------------------------------------------------
 -- MemRep, the king of this file

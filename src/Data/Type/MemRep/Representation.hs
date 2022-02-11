@@ -1,6 +1,6 @@
-{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE PolyKinds            #-}
+{-# LANGUAGE StandaloneDeriving   #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE StandaloneDeriving #-}
 
 
 module Data.Type.MemRep.Representation
@@ -19,8 +19,8 @@ module Data.Type.MemRep.Representation
   , zipSumLeft
   , zipSumRight
 ) where
-import Generics.SOP (All, All2)
-import Data.Kind
+import           Data.Kind
+import           Generics.SOP (All, All2)
 
 infixr 5 ++
 type family (++) (xs :: [k]) (ys :: [k]) :: [k] where
@@ -36,11 +36,11 @@ data ProductType :: [[Type]] -> Type where
   PTCons :: SumType x -> ProductType xs -> ProductType (x ': xs)
 
 instance (All2 Show xs) => Show (ProductType xs) where
-  show PTNil = "[]"
+  show PTNil         = "[]"
   show (PTCons a as) = show a ++ " : " ++ show as
 
 concatPT :: ProductType x -> ProductType y -> ProductType (x ++ y)
-concatPT PTNil ys = ys
+concatPT PTNil ys         = ys
 concatPT (PTCons x xs) ys = PTCons x (concatPT xs ys)
 
 -- Values
@@ -51,7 +51,7 @@ data Product :: [[Type]] -> Type where
 deriving instance (All2 Eq xs) => Eq (Product xs)
 
 instance (All2 Show xs) => Show (Product xs) where
-  show Nil = "[]"
+  show Nil         = "[]"
   show (Cons a as) = show a ++ " : " ++ show as
 
 concatP :: Product x -> Product y -> Product (x ++ y)
@@ -107,8 +107,8 @@ type family FoldMerge (xss :: f (g x)) :: g x where
 
 zipSumRight :: ProductType l -> Product r -> Product (Merge l r)
 zipSumRight (PTCons x xs) (Cons y ys) = Cons (takeRight x y) (zipSumRight xs ys)
-zipSumRight PTNil ys = ys
-zipSumRight xs Nil = makeUndefProduct xs
+zipSumRight PTNil ys                  = ys
+zipSumRight xs Nil                    = makeUndefProduct xs
 
 makeUndefProduct :: ProductType x -> Product x
 makeUndefProduct (PTCons y ys) = Cons (makeEmpty y) (makeUndefProduct ys)
@@ -125,8 +125,8 @@ makeEmpty STZero        = Undef
 
 zipSumT :: ProductType l -> ProductType r -> ProductType (Merge l r)
 zipSumT (PTCons x xs) (PTCons y ys) = PTCons (takeST x y) (zipSumT xs ys)
-zipSumT PTNil ys = ys
-zipSumT xs PTNil = xs
+zipSumT PTNil ys                    = ys
+zipSumT xs PTNil                    = xs
 
 takeST :: SumType l -> SumType r -> SumType (l ++ r)
 takeST (STSucc l ls) rs = STSucc l (takeST ls rs)

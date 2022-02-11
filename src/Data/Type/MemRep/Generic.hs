@@ -1,28 +1,31 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE AllowAmbiguousTypes     #-}
+{-# LANGUAGE FlexibleContexts        #-}
+{-# LANGUAGE FlexibleInstances       #-}
+{-# LANGUAGE NoStarIsType            #-}
+{-# LANGUAGE PolyKinds               #-}
+{-# LANGUAGE TypeFamilyDependencies  #-}
+{-# LANGUAGE UndecidableInstances    #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
-{-# LANGUAGE TypeFamilyDependencies #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 
 module Data.Type.MemRep.Generic (GMemRep) where
 
-import Generics.SOP hiding (Nil)
-import Generics.SOP.NP hiding (Nil)
-import Data.Finite (Finite, combineProduct, combineSum, separateProduct, separateSum)
-import Data.Type.MemRep.MemRep
-import Data.Type.MemRep.Representation
+import           Data.Finite                     (Finite, combineProduct,
+                                                  combineSum, separateProduct,
+                                                  separateSum)
+import           Data.Type.MemRep.MemRep
+import           Data.Type.MemRep.Representation
+import           Generics.SOP                    hiding (Nil)
+import           Generics.SOP.NP                 hiding (Nil)
 
-import Data.Kind (Type)
+import           Data.Kind                       (Type)
 
-import qualified Generics.SOP as SOP
+import qualified Generics.SOP                    as SOP
 
-import GHC.Base (Nat)
-import GHC.TypeLits (KnownNat, type (*), type (+))
+import           GHC.Base                        (Nat)
+import           GHC.TypeLits                    (KnownNat, type (*), type (+))
 
 
 -- generic instance for n-ary sums (so for everything)
@@ -40,7 +43,7 @@ instance
   gfields (SOP x)         = foldMerge
                               (mapAppendsT $ (pureMap2Fields @xss))
                               (mapAppends (map2Fields x))
-  
+
   gemptyFields = foldMergeT $ mapAppendsT $ (pureMap2Fields @xss)
 
   gfromMemRep cs fs = SOP (comapFromMemRep cs' fs')
@@ -52,24 +55,24 @@ pureNPProductMapFieldsT :: forall xss . (All2 MemRep xss) => NP ProductMapFields
 pureNPProductMapFieldsT = convert $ pure2Fields @xss
 
 convert :: NP NPT xss -> NP ProductMapFieldsT xss
-convert SOP.Nil = SOP.Nil
+convert SOP.Nil         = SOP.Nil
 convert ((NPT x) :* xs) = (ProductMapFieldsT (appendsT x) :* convert xs)
 
 pureChoices2 :: forall xss . (All2 KnownNat (Map2Choices xss)) => (All2 MemRep xss) => NP FiniteMapChoices xss
 pureChoices2 = convertC $ pure2Choices @xss
 
 convertC :: (All2 KnownNat (Map2Choices xss)) => NP NPC xss -> NP FiniteMapChoices xss
-convertC SOP.Nil = SOP.Nil
+convertC SOP.Nil         = SOP.Nil
 convertC ((NPC x) :* xs) = (FiniteMapChoices (combineProducts x) :* convertC xs)
 
 unMerge :: Product (FoldMerge (MapAppends (Map2Fields xss))) -> NP ProductMapFieldsT xss -> NS ProductMapFields xss
 unMerge _ SOP.Nil = error "Cannot construct empty sum"
 unMerge xs ((ProductMapFieldsT y) :* (ys :: NP ProductMapFieldsT xs)) = case splitHorizontal xs y (foldMergeT2 @xs ys) of
-  Left l -> Z (ProductMapFields l)
+  Left l  -> Z (ProductMapFields l)
   Right r -> S (unMerge r ys)
 
 foldMergeT2 :: NP ProductMapFieldsT xss -> ProductType (FoldMerge (MapAppends (Map2Fields xss)))
-foldMergeT2 SOP.Nil = PTNil
+foldMergeT2 SOP.Nil                       = PTNil
 foldMergeT2 ((ProductMapFieldsT x) :* xs) = zipSumT x (foldMergeT2 xs)
 
 newtype FiniteMapChoices a = FiniteMapChoices (Finite (Products (MapChoices a)))
@@ -81,7 +84,7 @@ newtype ProductMapFieldsT a = ProductMapFieldsT (ProductType (Appends (MapFields
 unSums :: (All KnownNat (MapProducts (Map2Choices xs))) => Finite (Sums (MapProducts (Map2Choices xs))) -> NP FiniteMapChoices xs -> NS FiniteMapChoices xs
 unSums _ SOP.Nil = error "Cannot construct empty sum"
 unSums x (_ :* ys) = case separateSum x of
-  Left x' -> Z (FiniteMapChoices x')
+  Left x'  -> Z (FiniteMapChoices x')
   Right x' -> S (unSums x' ys)
 
 comapFromMemRep :: (All2 KnownNat (Map2Choices xss), All2 MemRep xss) => NS FiniteMapChoices xss -> NS ProductMapFields xss -> NS (NP I) xss
@@ -138,19 +141,19 @@ mapChoices SOP.Nil   = SOP.Nil
 mapChoices (x :* xs) = choices (unI x) :* mapChoices xs
 
 map2choices :: (All2 MemRep xss) => NS (NP I) xss -> NS (NP Finite) (Map2Choices xss)
-map2choices (Z x) = Z (mapChoices x)
+map2choices (Z x)  = Z (mapChoices x)
 map2choices (S xs) = S (map2choices xs)
 
 sums :: All KnownNat xs => NS Finite xs -> Finite (Sums xs)
-sums (Z y) = combineSum (Left y)
+sums (Z y)  = combineSum (Left y)
 sums (S ys) = combineSum (Right (sums ys))
 
 mapProducts :: (All2 KnownNat xss) => NS (NP Finite) xss -> NS Finite (MapProducts xss)
-mapProducts (Z x) = Z (combineProducts x)
+mapProducts (Z x)  = Z (combineProducts x)
 mapProducts (S xs) = S (mapProducts xs)
 
 combineProducts :: (All KnownNat xs) => NP Finite xs -> Finite (Products xs)
-combineProducts SOP.Nil = 0
+combineProducts SOP.Nil   = 0
 combineProducts (y :* ys) = combineProduct (y, combineProducts ys)
 
 --------------------------------------------------------------------------------
@@ -162,11 +165,11 @@ mapFields SOP.Nil   = SOP.Nil
 mapFields (x :* xs) = fields (unI x) :* mapFields xs
 
 map2Fields :: (All2 MemRep xss) => NS (NP I) xss -> NS (NP Product) (Map2Fields xss)
-map2Fields (Z x) = Z (mapFields x)
+map2Fields (Z x)  = Z (mapFields x)
 map2Fields (S xs) = S (map2Fields xs)
 
 mapAppends :: NS (NP Product) xss -> NS Product (MapAppends xss)
-mapAppends (Z x) = Z (appends x)
+mapAppends (Z x)  = Z (appends x)
 mapAppends (S xs) = S (mapAppends xs)
 
 appends :: NP Product xs -> Product (Appends xs)
@@ -183,11 +186,11 @@ appendsT SOP.Nil   = PTNil
 appendsT (x :* xs) = concatPT x (appendsT xs)
 
 mapAppendsT :: NP (NP ProductType) xss -> NP ProductType (MapAppends xss)
-mapAppendsT SOP.Nil = SOP.Nil
+mapAppendsT SOP.Nil   = SOP.Nil
 mapAppendsT (x :* xs) = appendsT x :* mapAppendsT xs
 
 foldMergeT :: NP ProductType xss -> ProductType (FoldMerge xss)
-foldMergeT SOP.Nil = PTNil
+foldMergeT SOP.Nil   = PTNil
 foldMergeT (x :* xs) = zipSumT x (foldMergeT xs)
 
 --------------------------------------------------------------------------------
@@ -201,7 +204,7 @@ pureMapFields :: forall xs . (All MemRep xs) => NP ProductType (MapFields xs)
 pureMapFields = convertPureFields (pureFields @xs)
   where
     convertPureFields :: NP PFT ys -> NP ProductType (MapFields ys)
-    convertPureFields SOP.Nil   = SOP.Nil
+    convertPureFields SOP.Nil         = SOP.Nil
     convertPureFields ((PFT x) :* xs) = x :* convertPureFields xs
 
 pureFields :: (All MemRep zs) => NP PFT zs
@@ -216,7 +219,7 @@ pureMap2Fields :: forall xss . (All2 MemRep xss) => NP (NP ProductType) (Map2Fie
 pureMap2Fields = convertPure2Fields (pure2Fields @xss)
   where
     convertPure2Fields :: NP NPT yss -> NP (NP ProductType) (Map2Fields yss)
-    convertPure2Fields SOP.Nil   = SOP.Nil
+    convertPure2Fields SOP.Nil         = SOP.Nil
     convertPure2Fields ((NPT x) :* xs) = x :* convertPure2Fields xs
 
 pure2Fields :: (All2 MemRep zss) => NP NPT zss
@@ -252,7 +255,7 @@ pureMapChoices :: forall xs . (All MemRep xs) => NP Finite (MapChoices xs)
 pureMapChoices = convertPureChoices (pureChoices @xs)
   where
     convertPureChoices :: NP PC ys -> NP Finite (MapChoices ys)
-    convertPureChoices SOP.Nil   = SOP.Nil
+    convertPureChoices SOP.Nil        = SOP.Nil
     convertPureChoices ((PC x) :* xs) = x :* convertPureChoices xs
 
 pureChoices :: (All MemRep xs) => NP PC xs
@@ -279,7 +282,7 @@ zipFromMemRep (PC c :* cs) (PF f :* fs) = I (fromMemRep c f) :* zipFromMemRep cs
 splitHorizontal :: Product (Merge l r) -> ProductType l -> ProductType r -> Either (Product l) (Product r)
 -- Base case: both products are of the same length
 splitHorizontal (Cons x Nil) (PTCons l PTNil) (PTCons _ PTNil) = case splitSum x l of
-  Left l' -> Left (Cons l' Nil)
+  Left l'  -> Left (Cons l' Nil)
   Right r' -> Right (Cons r' Nil)
 -- Base case: Right is longer
 splitHorizontal x           PTNil         _             = Right x
@@ -299,5 +302,5 @@ splitSum :: Sum (l ++ r) -> SumType l -> Either (Sum l) (Sum r)
 splitSum (Pick x)  (STSucc _ _)  = Left (Pick x)
 splitSum xs        STZero        = Right xs
 splitSum (Skip xs) (STSucc _ ls) = case splitSum xs ls of
-  Left l -> Left (Skip l)
+  Left l  -> Left (Skip l)
   Right r -> Right r
