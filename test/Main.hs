@@ -4,13 +4,9 @@ module Main where
 
 import Test.Tasty ( defaultMain, testGroup, TestTree )
 import Test.Tasty.HUnit ( testCase, (@?=) )
-import Data.Type.MemRep
-    ( Finite,
-      MemRep(choices, fields),
-      Remainder(Zero, Succ),
-      Sum(Pick, Skip),
-      Product(Nil, Cons) )
-import Data.Type.Instances
+import Data.Type.MemRep.MemRep
+import Data.Type.MemRep.Representation
+import Data.Type.MemRep.Instances ()
 
 main :: IO ()
 main = defaultMain tests
@@ -19,39 +15,39 @@ tests :: TestTree
 tests = testGroup "Test Choices and Fields of basic data types"
   [ testGroup "Maybe"
     [ testCase "Nothing" $
-        choices (Nothing :: Maybe Int) @?= Cons (Pick (0 :: Finite 2) Zero) Nil
+        choices (Nothing :: Maybe Int) @?= 0
     , testCase "Just" $
-        choices (Just 14 :: Maybe Int) @?= Cons (Pick (1 :: Finite 2) Zero) Nil
+        choices (Just 14 :: Maybe Int) @?= 1
     , testCase "Nested" $
-        choices nestedMaybe @?= Cons (Pick (1 :: Finite 2) Zero) (Cons (Pick (1 :: Finite 2) Zero) Nil)
+        choices nestedMaybe @?= 2
     , testCase "Fields" $
-        fields nestedMaybe @?= Cons (Pick 1.4 Zero) Nil
+        fields nestedMaybe @?= Cons (Pick 1.4) Nil
     ]
   , testGroup "Either"
     [ testCase "Left" $
-        choices (Left 1 :: Either Int Float) @?= Cons (Pick (0 :: Finite 2) Zero) Nil
+        choices (Left 1 :: Either Int Float) @?= 0
     , testCase "Right" $
-        choices (Right 14 :: Either Float Int) @?= Cons (Pick (1 :: Finite 2) Zero) Nil
+        choices (Right 14 :: Either Float Int) @?= 1
     , testCase "Nested" $
-        choices nestedEither @?= Cons (Pick (1 :: Finite 2) Zero) (Cons (Skip $ Pick (0 :: Finite 2) Zero) Nil)
+        choices nestedEither @?= 2
     , testCase "Fields" $
-      fields nestedEither @?= Cons (Skip $ Skip $ Pick 1.4 $ Succ Zero) Nil
+      fields nestedEither @?= Cons (Skip $ Skip $ Pick 1.4) Nil
     ]
   , testGroup "Tuple"
     [ testCase "choices" $
-        choices (1 :: Int, 2.3 :: Float) @?= Nil
+        choices (1 :: Int, 2.3 :: Float) @?= 0
     , testCase "fields" $
-        fields (1 :: Int, 2.3 :: Float) @?= Cons (Pick 1 Zero) (Cons (Pick 2.3 Zero) Nil)
+        fields (1 :: Int, 2.3 :: Float) @?= Cons (Pick 1) (Cons (Pick 2.3) Nil)
     ]
   , testGroup "Mixed"
     [ testCase "fields (Either, Either)" $
-        choices tupleOfEithers @?= Cons (Pick 0 Zero) (Cons (Pick 1 Zero) Nil)
+        choices tupleOfEithers @?= 2
     , testCase "choices (Either, Either)" $
-        fields tupleOfEithers @?= Cons (Pick 1 $ Succ Zero) (Cons (Skip $ Pick 2.3 Zero) Nil)
+        fields tupleOfEithers @?= Cons (Pick 1) (Cons (Skip $ Pick 2.3) Nil)
     , testCase "fields Either (,) (,)" $
-        choices eitherOfTuples @?= Cons (Pick 0 Zero) Nil
+        choices eitherOfTuples @?= 0
     , testCase "choices Either (,) (,)" $
-        fields eitherOfTuples @?= Cons (Pick 1 $ Succ Zero) (Cons (Pick 3.4 $ Succ Zero) Nil)
+        fields eitherOfTuples @?= Cons (Pick 1) (Cons (Pick 3.4) Nil)
     ]
   ]
 
