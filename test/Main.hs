@@ -60,6 +60,8 @@ tests = testGroup "Test Choices and Fields of basic data types"
         propInjectivity @(Int, Float, Word, Float, Char)
     , testProperty "Unit" $
         propInjectivity @()
+    , testProperty "Ordering" $
+        propInjectivity @Ordering
     ]
   ]
 
