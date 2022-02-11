@@ -1,0 +1,26 @@
+name: "Build & Test"
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: "Install Stack"
+      run: "sudo apt-get -y install haskell-stack"
+
+    - name: "Install stylish-haskell"
+      run: "stack install stylish-haskell"
+
+    - name: "Run linter"
+      run: "stylish-haskell -r src/"
+
+    - name: "Install dependencies"
+      run: "stack install"
+
+    - name: "Build"
+      run: "stack build"
+
+    - name: "Run tests"
+      run: "stack test"
