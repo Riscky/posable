@@ -10,7 +10,6 @@
 module Data.Type.MemRep.Instances (MemRep) where
 
 import           Data.Int                        (Int16, Int8)
-import           Data.Type.MemRep.Generic        ()
 import           Data.Type.MemRep.MemRep
 import           Data.Type.MemRep.Representation
 
