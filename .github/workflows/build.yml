@@ -17,9 +17,6 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-stack
 
-    - name: "Install Stack"
-      run: "sudo apt-get -y install haskell-stack"
-
     - name: "Get stylish-haskell"
       run: "curl -L https://github.com/haskell/stylish-haskell/releases/download/v0.13.0.0/stylish-haskell-v0.13.0.0-linux-x86_64.tar.gz -o stylish-haskell.tar.gz"
 
@@ -32,8 +29,23 @@ jobs:
     - name: "add stylish-haskell to PATH"
       run: "echo 'stylish-haskell-v0.13.0.0-linux-x86_64/stylish-haskell' >> $GITHUB_PATH"
 
-    - name: "Run linter"
+    - name: "Run stylish-haskell"
       run: "./stylish-haskell.sh"
+
+    - name: "Get hlint"
+      run: "curl -L https://github.com/ndmitchell/hlint/releases/download/v3.3.6/hlint-3.3.6-x86_64-linux.tar.gz -o hlint.tar.gz"
+
+    - name: "Verify contents"
+      run: "echo 'd9e106841bc4d6efd546adb71b2149f9467724c271ce739454816da210a1a101  hlint.tar.gz' > sha256sum --check -"
+
+    - name: "Untar hlint"
+      run: "tar xzf hlint.tar.gz"
+
+    - name: "Run stylish-haskell"
+      run: "./hlint-3.3.6/hlint src/"
+
+    - name: "Install Stack"
+      run: "sudo apt-get -y install haskell-stack"
 
     - name: "Install dependencies"
       run: "stack install"
