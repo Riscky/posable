@@ -18,16 +18,12 @@ module Data.Type.MemRep.Representation
   , zipSumT
   , zipSumLeft
   , zipSumRight
-  , splitSum
-  , splitProduct
   , splitProductLeft
   , splitProductRight
   , unConcatP
 ) where
 import           Data.Kind
 import           Generics.SOP (All, All2)
-
-import Unsafe.Coerce (unsafeCoerce)
 
 infixr 5 ++
 type family (++) (xs :: [k]) (ys :: [k]) :: [k] where
@@ -156,26 +152,6 @@ splitProductLeft :: Product (Merge l r) -> ProductType l -> ProductType r -> Pro
 splitProductLeft _ PTNil _ = Nil
 splitProductLeft xs _ PTNil = xs
 splitProductLeft (Cons x xs) (PTCons l ls) (PTCons r rs) = Cons (splitSumLeft x l r) (splitProductLeft xs ls rs)
-
-splitProduct :: Product (Merge l r) -> ProductType l -> ProductType r -> Either (Product l) (Product r)
-splitProduct (Cons x xs) (PTCons l ls) (PTCons r rs) = case splitSum x l r of
-  Left l'-> Left $ Cons l' $ splitProductLeft xs ls rs
-  Right r' -> Right $ Cons r' $ splitProductRight xs ls rs
-splitProduct (Cons x xs) PTNil (PTCons r rs) = case splitSum x STZero r of
-  Left _ -> Left Nil
-  Right r' -> Right $ Cons r' $ splitProductRight xs PTNil rs
--- unsafe to prevent proving (x ++ '[]) ~ x
-splitProduct (Cons x xs) (PTCons l ls) PTNil = case splitSum (unsafeCoerce x) l STZero of
-  Left l' -> Left $ Cons l' $ splitProductLeft xs ls PTNil
-  Right _ -> Right Nil
-splitProduct Nil PTNil PTNil = error "No clue what to do here"
-
-splitSum :: Sum (l ++ r) -> SumType l -> SumType r -> Either (Sum l) (Sum r)
-splitSum (Pick x)  (STSucc _ _)  _ = Left (Pick x)
-splitSum xs        STZero        _ = Right xs
-splitSum (Skip xs) (STSucc _ ls) rs = case splitSum xs ls rs of
-  Left l  -> Left (Skip l)
-  Right r -> Right r
 
 splitSumRight :: Sum (l ++ r) -> SumType l -> SumType r -> Sum r
 splitSumRight xs        STZero        _ = xs

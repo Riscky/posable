@@ -45,35 +45,9 @@ instance
 
   gemptyFields = foldMergeT $ mapAppendsT $ (pureMap2Fields @xss)
 
-  -- TODO: first calculate the choices, calculate the fields after, and only throw errors
-  -- when that does not match
-  gfromMemRep cs fs = SOP (comapFromMemRep' cs' fs (pureAppendsFields @xss))
+  gfromMemRep cs fs = SOP (mapFromMemRep cs' fs (pureAppendsFields @xss))
     where
       cs' = unSums cs (pureChoices2 @xss)
-      fs' = unMerge fs (pureAppendsFields @xss)
-
-comapFromMemRep' :: (All2 KnownNat (Map2Choices xss), All2 MemRep xss) => NS ProductsMapChoices xss -> Product (FoldMerge (MapAppends (Map2Fields xss))) -> NP ProductAppendsFieldsT xss -> NS (NP I) xss
-comapFromMemRep' (Z cs) a b = Z (zipFromMemRep cs' ( unAppends (unMergeLeft' a b) (pureFields)))
-  where
-    cs' = separateProducts cs (pureChoices)
-comapFromMemRep' (S cs) a b | (S fs) <- unMergeRight a b = S (comapFromMemRep' cs (unMergeRight' a b) (unMergeRight2 b))
-comapFromMemRep' _ _ _ = error "Choices and Fields of unequal length"
-
---  Merge a (FoldMerge as)
-unMergeLeft' :: Product (Merge (Appends (MapFields xs)) (FoldMerge (MapAppends (Map2Fields xss)))) -> NP ProductAppendsFieldsT (xs ': xss) -> ProductAppendsFields xs
-unMergeLeft' xs ((ProductAppendsFieldsT y) :* (ys :: NP ProductAppendsFieldsT xs)) = ProductAppendsFields (splitProductLeft xs y (foldMergeT2 @xs ys))
-
-unMergeRight2 :: forall xs xss . NP ProductAppendsFieldsT (xs ': xss) -> NP ProductAppendsFieldsT xss
-unMergeRight2 (_ :* ys) = ys
-
-unMergeRight' :: forall xs xss . Product (Merge (Appends (MapFields xs)) (FoldMerge (MapAppends (Map2Fields xss)))) -> NP ProductAppendsFieldsT (xs ': xss) -> Product (FoldMerge (MapAppends (Map2Fields xss)))
-unMergeRight' xs ((ProductAppendsFieldsT y) :* ys) = splitProductRight xs y (foldMergeT2 @xss ys)
-
-unMergeRight :: Product (FoldMerge (MapAppends (Map2Fields xss))) -> NP ProductAppendsFieldsT xss -> NS ProductAppendsFields xss
-unMergeRight _ SOP.Nil = error "Cannot construct empty sum"
-unMergeRight xs ((ProductAppendsFieldsT y) :* (ys :: NP ProductAppendsFieldsT xs)) =
-  let a = splitProductRight xs y (foldMergeT2 @xs ys) in
-  S (unMergeRight a ys)
 
 --------------------------------------------------------------------------------
 -- Supporting types and classes
@@ -179,8 +153,6 @@ newtype ProductFields a = ProductFields (Product (Fields a))
 
 newtype ProductFieldsT a = ProductFieldsT (ProductType (Fields a))
 
-newtype ProductAppendsFields a = ProductAppendsFields (Product (Appends (MapFields a)))
-
 newtype ProductAppendsFieldsT a = ProductAppendsFieldsT (ProductType (Appends (MapFields a)))
 
 newtype ProductMapFieldsT a = ProductMapFieldsT (NP (ProductType) (MapFields a))
@@ -256,12 +228,6 @@ pure2Choices = cpure_NP (Proxy :: Proxy (All MemRep)) pureFMapChoices
 -------------------------------------------------------
 -- Functions to get back to the SOP representation
 
-unAppends :: ProductAppendsFields xs -> NP ProductFieldsT xs -> NP ProductFields xs
-unAppends (ProductAppendsFields Nil) SOP.Nil     = SOP.Nil
-unAppends (ProductAppendsFields xs)  (ProductFieldsT ys :* yss) = ProductFields x' :* (unAppends (ProductAppendsFields xs') yss)
-  where
-    (x', xs') = unConcatP xs ys
-
 separateProducts :: (All KnownNat (MapChoices xs)) => ProductsMapChoices xs -> NP FChoices xs -> NP FChoices xs
 separateProducts _ SOP.Nil   = SOP.Nil
 separateProducts (ProductsMapChoices x) (_ :* ys) = FChoices x' :* (separateProducts (ProductsMapChoices xs) ys)
@@ -271,12 +237,6 @@ separateProducts (ProductsMapChoices x) (_ :* ys) = FChoices x' :* (separateProd
 zipFromMemRep :: All MemRep xs => NP FChoices xs -> NP ProductFields xs -> NP I xs
 zipFromMemRep SOP.Nil SOP.Nil = SOP.Nil
 zipFromMemRep (FChoices c :* cs) (ProductFields f :* fs) = I (fromMemRep c f) :* zipFromMemRep cs fs
-
-unMerge :: Product (FoldMerge (MapAppends (Map2Fields xss))) -> NP ProductAppendsFieldsT xss -> NS ProductAppendsFields xss
-unMerge _ SOP.Nil = error "Cannot construct empty sum"
-unMerge xs ((ProductAppendsFieldsT y) :* (ys :: NP ProductAppendsFieldsT xs)) = case splitProduct xs y (foldMergeT2 @xs ys) of
-  Left l  -> Z (ProductAppendsFields l)
-  Right r -> S (unMerge r ys)
 
 foldMergeT2 :: NP ProductAppendsFieldsT xss -> ProductType (FoldMerge (MapAppends (Map2Fields xss)))
 foldMergeT2 SOP.Nil                       = PTNil
@@ -288,10 +248,20 @@ unSums x (_ :* ys) = case separateSum x of
   Left x'  -> Z (ProductsMapChoices x')
   Right x' -> S (unSums x' ys)
 
-comapFromMemRep :: (All2 KnownNat (Map2Choices xss), All2 MemRep xss) => NS ProductsMapChoices xss -> NS ProductAppendsFields xss -> NS (NP I) xss
-comapFromMemRep (Z cs) (Z fs) = Z (zipFromMemRep cs' fs')
+mapFromMemRep :: forall xss . (All2 KnownNat (Map2Choices xss), All2 MemRep xss) => NS ProductsMapChoices xss -> Product (FoldMerge (MapAppends (Map2Fields xss))) -> NP ProductAppendsFieldsT xss -> NS (NP I) xss
+mapFromMemRep (Z cs) fs fts = Z (zipFromMemRep cs' ( unAppends (unMergeLeft fs fts) (pureFields)))
   where
     cs' = separateProducts cs (pureChoices)
-    fs' = unAppends fs (pureFields)
-comapFromMemRep (S cs) (S fs) = S (comapFromMemRep cs fs)
-comapFromMemRep _ _  = error "Choices and Fields of unequal length"
+mapFromMemRep (S cs) fs fts = S (mapFromMemRep cs (unMergeRight fs fts) (tl fts))
+
+unAppends :: Product (Appends (MapFields xs)) -> NP ProductFieldsT xs -> NP ProductFields xs
+unAppends Nil SOP.Nil     = SOP.Nil
+unAppends xs  (ProductFieldsT ys :* yss) = ProductFields x' :* (unAppends (xs') yss)
+  where
+    (x', xs') = unConcatP xs ys
+    
+unMergeLeft :: forall xs xss . Product (Merge (Appends (MapFields xs)) (FoldMerge (MapAppends (Map2Fields xss)))) -> NP ProductAppendsFieldsT (xs ': xss) -> Product (Appends (MapFields xs))
+unMergeLeft xs ((ProductAppendsFieldsT y) :* ys) = splitProductLeft xs y (foldMergeT2 @xss ys)
+
+unMergeRight :: forall xs xss . Product (Merge (Appends (MapFields xs)) (FoldMerge (MapAppends (Map2Fields xss)))) -> NP ProductAppendsFieldsT (xs ': xss) -> Product (FoldMerge (MapAppends (Map2Fields xss)))
+unMergeRight xs ((ProductAppendsFieldsT y) :* ys) = splitProductRight xs y (foldMergeT2 @xss ys)
