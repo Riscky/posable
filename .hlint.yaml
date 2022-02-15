@@ -1,0 +1,8 @@
+- arguments:
+  - "-XNoStarIsType"
+  - "-XDataKinds"
+  - "-XTypeApplications"
+  - "-XTypeOperators"
+  - "-XScopedTypeVariables"
+  - "-XTypeFamilies"
+  - "-XGADTs"
