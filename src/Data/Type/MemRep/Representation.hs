@@ -76,8 +76,8 @@ data Sum :: [Type] -> Type where
 deriving instance (All Eq xs) => Eq (Sum xs)
 
 instance (All Show x) => Show (SumType x) where
-  show (STSucc x xs)     = "STSucc " ++ show x ++ " (" ++ show xs ++ ")"
-  show STZero            = "STZero"
+  show (STSucc x xs) = "STSucc " ++ show x ++ " (" ++ show xs ++ ")"
+  show STZero        = "STZero"
 
 instance (All Show x) => Show (Sum x) where
   show (Pick x) = "Pick " ++ show x
@@ -154,13 +154,13 @@ splitProductLeft xs _ PTNil = xs
 splitProductLeft (Cons x xs) (PTCons l ls) (PTCons r rs) = Cons (splitSumLeft x l r) (splitProductLeft xs ls rs)
 
 splitSumRight :: Sum (l ++ r) -> SumType l -> SumType r -> Sum r
-splitSumRight xs        STZero        _ = xs
-splitSumRight (Pick _)  (STSucc _ _)  _ = error "Value not in Right"
+splitSumRight xs        STZero        _  = xs
+splitSumRight (Pick _)  (STSucc _ _)  _  = error "Value not in Right"
 splitSumRight (Skip xs) (STSucc _ ls) rs = splitSumRight xs ls rs
 
 splitSumLeft :: Sum (l ++ r) -> SumType l -> SumType r -> Sum l
-splitSumLeft (Pick x)  (STSucc _ _) _  = Pick x
-splitSumLeft _        STZero        _  = Undef -- or error?
+splitSumLeft (Pick x)  (STSucc _ _) _   = Pick x
+splitSumLeft _        STZero        _   = Undef -- or error?
 splitSumLeft (Skip xs) (STSucc _ ls) rs = Skip $ splitSumLeft xs ls rs
 
 unConcatP :: Product (x ++ y) -> ProductType x -> (Product x, Product y)

@@ -161,7 +161,7 @@ pureMapFields :: forall xs . (All MemRep xs) => NP ProductType (MapFields xs)
 pureMapFields = convert $ pureFields @xs
   where
     convert :: NP ProductFieldsT ys -> NP ProductType (MapFields ys)
-    convert SOP.Nil         = SOP.Nil
+    convert SOP.Nil                    = SOP.Nil
     convert ((ProductFieldsT x) :* xs) = x :* convert xs
 
 pureFields :: (All MemRep xs) => NP ProductFieldsT xs
@@ -174,7 +174,7 @@ pureMap2Fields :: forall xss . (All2 MemRep xss) => NP (NP ProductType) (Map2Fie
 pureMap2Fields = convert $ pure2Fields @xss
   where
     convert :: NP ProductMapFieldsT yss -> NP (NP ProductType) (Map2Fields yss)
-    convert SOP.Nil         = SOP.Nil
+    convert SOP.Nil                       = SOP.Nil
     convert ((ProductMapFieldsT x) :* xs) = x :* convert xs
 
 pure2Fields :: (All2 MemRep zss) => NP ProductMapFieldsT zss
@@ -210,9 +210,9 @@ pureMapChoices :: forall xs . (All MemRep xs) => NP Finite (MapChoices xs)
 pureMapChoices = convert $ pureChoices @xs
   where
     convert :: NP FChoices ys -> NP Finite (MapChoices ys)
-    convert SOP.Nil        = SOP.Nil
+    convert SOP.Nil              = SOP.Nil
     convert ((FChoices x) :* xs) = x :* convert xs
-    
+
 pureChoices :: (All MemRep xs) => NP FChoices xs
 pureChoices = cpure_NP (Proxy :: Proxy MemRep) pureFChoices
   where
@@ -239,7 +239,7 @@ zipFromMemRep SOP.Nil SOP.Nil = SOP.Nil
 zipFromMemRep (FChoices c :* cs) (ProductFields f :* fs) = I (fromMemRep c f) :* zipFromMemRep cs fs
 
 foldMergeT2 :: NP ProductAppendsFieldsT xss -> ProductType (FoldMerge (MapAppends (Map2Fields xss)))
-foldMergeT2 SOP.Nil                       = PTNil
+foldMergeT2 SOP.Nil                           = PTNil
 foldMergeT2 ((ProductAppendsFieldsT x) :* xs) = zipSumT x (foldMergeT2 xs)
 
 unSums :: (All KnownNat (MapProducts (Map2Choices xs))) => Finite (Sums (MapProducts (Map2Choices xs))) -> NP ProductsMapChoices xs -> NS ProductsMapChoices xs
@@ -259,7 +259,7 @@ unAppends Nil SOP.Nil     = SOP.Nil
 unAppends xs  (ProductFieldsT ys :* yss) = ProductFields x' :* (unAppends (xs') yss)
   where
     (x', xs') = unConcatP xs ys
-    
+
 unMergeLeft :: forall xs xss . Product (Merge (Appends (MapFields xs)) (FoldMerge (MapAppends (Map2Fields xss)))) -> NP ProductAppendsFieldsT (xs ': xss) -> Product (Appends (MapFields xs))
 unMergeLeft xs ((ProductAppendsFieldsT y) :* ys) = splitProductLeft xs y (foldMergeT2 @xss ys)
 

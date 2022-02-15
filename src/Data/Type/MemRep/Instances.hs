@@ -92,15 +92,15 @@ instance MemRep Int16 where
 instance MemRep Char where
     type Choices Char = 1
     choices _ = 0
-  
+
     type Fields Char = '[ '[Char]]
     fields x = Cons (Pick x) Nil
-  
+
     fromMemRep 0 (Cons (Pick x) Nil) = x
     fromMemRep _ _                   = error "index out of range"
-  
+
     widths = [32]
-  
+
     emptyFields = PTCons (STSucc '_' STZero) PTNil
 
 instance MemRep Word where
@@ -116,4 +116,4 @@ instance MemRep Word where
   widths = [8]
 
   emptyFields = PTCons (STSucc 0 STZero) PTNil
-  
+

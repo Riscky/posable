@@ -20,11 +20,17 @@ jobs:
     - name: "Install Stack"
       run: "sudo apt-get -y install haskell-stack"
 
-    - name: "Install stylish-haskell"
-      run: "stack install stylish-haskell"
+    - name: "Get stylish-haskell"
+      run: "curl https://github.com/haskell/stylish-haskell/releases/download/v0.13.0.0/stylish-haskell-v0.13.0.0-linux-x86_64.tar.gz -o stylish-haskell.tar.gz"
+
+    - name: "Untar stylish-haskell"
+      run: "tar xzf stylish-haskell.tar.gz"
+
+    - name: "add stylish-haskell to PATH"
+      run: "echo 'stylish-haskell-v0.13.0.0-linux-x86_64/stylish-haskell' >> $GITHUB_PATH"
 
     - name: "Run linter"
-      run: "stylish-haskell -r src/"
+      run: "./stylish-haskell.sh"
 
     - name: "Install dependencies"
       run: "stack install"
