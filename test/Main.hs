@@ -1,20 +1,21 @@
-{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DataKinds        #-}
+{-# LANGUAGE DeriveAnyClass   #-}
+{-# LANGUAGE DeriveGeneric    #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveGeneric #-}
 
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_GHC -fconstraint-solver-iterations=8 #-}
 
 module Main where
 
-import Test.Tasty ( defaultMain, testGroup, TestTree )
-import Test.Tasty.HUnit ( testCase, (@?=) )
-import Data.Type.MemRep.MemRep as MemRep
-import Data.Type.MemRep.Representation
-import Data.Type.MemRep.Instances ()
-import Test.Tasty.QuickCheck
-import GHC.Generics as GHC
+import           Data.Type.MemRep.Instances      ()
+import           Data.Type.MemRep.MemRep         as MemRep
+import           Data.Type.MemRep.Representation
+import           GHC.Generics                    as GHC
+import           Test.Tasty                      (TestTree, defaultMain,
+                                                  testGroup)
+import           Test.Tasty.HUnit                (testCase, (@?=))
+import           Test.Tasty.QuickCheck
 
 main :: IO ()
 main = defaultMain tests

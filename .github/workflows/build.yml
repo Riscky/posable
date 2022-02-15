@@ -42,7 +42,7 @@ jobs:
       run: "tar xzf hlint.tar.gz"
 
     - name: "Run stylish-haskell"
-      run: "./hlint-3.3.6/hlint src/"
+      run: "./hlint-3.3.6/hlint ."
 
     - name: "Install Stack"
       run: "sudo apt-get -y install haskell-stack"
