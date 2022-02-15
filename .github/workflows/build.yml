@@ -41,8 +41,8 @@ jobs:
     - name: "Untar hlint"
       run: "tar xzf hlint.tar.gz"
 
-    - name: "Run stylish-haskell"
-      run: "./hlint-3.3.6/hlint ."
+    - name: "Run hlint"
+      run: "./hlint-3.3.6/hlint src test examples"
 
     - name: "Install Stack"
       run: "sudo apt-get -y install haskell-stack"
