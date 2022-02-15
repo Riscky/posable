@@ -2,42 +2,20 @@
 
 ## Dependencies
 
-- The [Nix] package manager
+- The [Stack] package manager (Tested with stack 2.7.3)
+- stylish-haskell (for linting only)
 
-Run `nix-shell` to open a shell with all the dependencies:
-
-``` bash
-nix-shell
-```
-
-## Developing
-
-Inside `nix-shell`, run:
+## Tests and lints
 
 ``` bash
-cabal repl
-```
-
-## Run tests and lints
-
-Inside `nix-shell`, run:
-
-``` bash
-cabal test
-hlint .
+stylish-haskell -r src/
+stack test
 ```
 
 ## Building
 
-Inside `nix-shell`, run:
-
 ``` bash
-cabal build
+stack build
 ```
 
-[Nix]: https://nixos.org/
-
-
-## Stack
-
-Tested with stack 2.7.3
+[Stack]: https://docs.haskellstack.org/en/stable/README/
