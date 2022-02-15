@@ -23,6 +23,9 @@ jobs:
     - name: "Get stylish-haskell"
       run: "curl https://github.com/haskell/stylish-haskell/releases/download/v0.13.0.0/stylish-haskell-v0.13.0.0-linux-x86_64.tar.gz -o stylish-haskell.tar.gz"
 
+    - name: "Verify contents"
+      run: "echo '6032f4cff06fad7a55f49989d9a72595f83e84cb7f235db06920d1b56ffa4c93  stylish-haskell.tar.gz' > sha256sum --check -"
+
     - name: "Untar stylish-haskell"
       run: "tar xzf stylish-haskell.tar.gz"
 
