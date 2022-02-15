@@ -20,6 +20,8 @@ module Data.Type.MemRep.Representation
   , zipSumRight
   , splitSum
   , splitProduct
+  , splitProductLeft
+  , splitProductRight
   , unConcatP
 ) where
 import           Data.Kind
@@ -147,11 +149,11 @@ takeRight STZero        rs = rs
 
 splitProductRight :: Product (Merge l r) -> ProductType l -> ProductType r -> Product r
 splitProductRight xs PTNil _ = xs
-splitProductRight xs _ PTNil = Nil
+splitProductRight _  _ PTNil = Nil
 splitProductRight (Cons x xs) (PTCons l ls) (PTCons r rs) = Cons (splitSumRight x l r) (splitProductRight xs ls rs)
 
 splitProductLeft :: Product (Merge l r) -> ProductType l -> ProductType r -> Product l
-splitProductLeft xs PTNil _ = Nil
+splitProductLeft _ PTNil _ = Nil
 splitProductLeft xs _ PTNil = xs
 splitProductLeft (Cons x xs) (PTCons l ls) (PTCons r rs) = Cons (splitSumLeft x l r) (splitProductLeft xs ls rs)
 
@@ -177,12 +179,12 @@ splitSum (Skip xs) (STSucc _ ls) rs = case splitSum xs ls rs of
 
 splitSumRight :: Sum (l ++ r) -> SumType l -> SumType r -> Sum r
 splitSumRight xs        STZero        _ = xs
-splitSumRight (Pick x)  (STSucc _ _)  _ = error "Value not in Right"
+splitSumRight (Pick _)  (STSucc _ _)  _ = error "Value not in Right"
 splitSumRight (Skip xs) (STSucc _ ls) rs = splitSumRight xs ls rs
 
 splitSumLeft :: Sum (l ++ r) -> SumType l -> SumType r -> Sum l
 splitSumLeft (Pick x)  (STSucc _ _) _  = Pick x
-splitSumLeft _        STZero       _  = Undef
+splitSumLeft _        STZero        _  = Undef -- or error?
 splitSumLeft (Skip xs) (STSucc _ ls) rs = Skip $ splitSumLeft xs ls rs
 
 unConcatP :: Product (x ++ y) -> ProductType x -> (Product x, Product y)
