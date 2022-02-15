@@ -1,14 +1,20 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
+{-# OPTIONS_GHC -fconstraint-solver-iterations=8 #-}
 
 module Main where
 
 import Test.Tasty ( defaultMain, testGroup, TestTree )
 import Test.Tasty.HUnit ( testCase, (@?=) )
-import Data.Type.MemRep.MemRep
+import Data.Type.MemRep.MemRep as MemRep
 import Data.Type.MemRep.Representation
 import Data.Type.MemRep.Instances ()
 import Test.Tasty.QuickCheck
+import GHC.Generics as GHC
 
 main :: IO ()
 main = defaultMain tests
@@ -62,8 +68,24 @@ tests = testGroup "Test Choices and Fields of basic data types"
         propInjectivity @()
     , testProperty "Ordering" $
         propInjectivity @Ordering
+    , testProperty "Large sum" $
+        propInjectivity @LONGSUM
+    , testProperty "Large product" $
+        propInjectivity @LONGPRODUCT
     ]
   ]
+
+data LONGSUM = A | B | C | D | E | F | G | H | I | J | K | L | M | N | O | P | Q | R | S | T | U | V | W | X | Y | Z
+    deriving (Show, Eq, GHC.Generic, MemRep.Generic, MemRep)
+
+instance Arbitrary LONGSUM where
+    arbitrary = elements [A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z]
+
+data LONGPRODUCT = LONGPRODUCT Int Float Double Char Word Int Float Double Char Word Int Float Double Char Word Int Float Double Char Word
+    deriving (Show, Eq, GHC.Generic, MemRep.Generic, MemRep)
+
+instance Arbitrary LONGPRODUCT where
+    arbitrary = LONGPRODUCT <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
 nestedMaybe :: Maybe (Maybe Float)
 nestedMaybe = Just (Just 1.4)

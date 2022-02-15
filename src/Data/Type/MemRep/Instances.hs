@@ -43,8 +43,6 @@ instance MemRep Int where
   fromMemRep 0 (Cons (Pick x) Nil) = x
   fromMemRep _ _                   = error "index out of range"
 
-  widths = [32]
-
   emptyFields = PTCons (STSucc 0 STZero) PTNil
 
 instance MemRep Float where
@@ -56,8 +54,6 @@ instance MemRep Float where
 
   fromMemRep 0 (Cons (Pick x) Nil) = x
   fromMemRep _ _                   = error "index out of range"
-
-  widths = [32]
 
   emptyFields = PTCons (STSucc 0 STZero) PTNil
 
@@ -71,8 +67,6 @@ instance MemRep Int8 where
   fromMemRep 0 (Cons (Pick x) Nil) = x
   fromMemRep _ _                   = error "index out of range"
 
-  widths = [8]
-
   emptyFields = PTCons (STSucc 0 STZero) PTNil
 
 instance MemRep Int16 where
@@ -84,8 +78,6 @@ instance MemRep Int16 where
 
   fromMemRep 0 (Cons (Pick x) Nil) = x
   fromMemRep _ _                   = error "index out of range"
-
-  widths = [16]
 
   emptyFields = PTCons (STSucc 0 STZero) PTNil
 
@@ -99,8 +91,6 @@ instance MemRep Char where
     fromMemRep 0 (Cons (Pick x) Nil) = x
     fromMemRep _ _                   = error "index out of range"
 
-    widths = [32]
-
     emptyFields = PTCons (STSucc '_' STZero) PTNil
 
 instance MemRep Word where
@@ -113,7 +103,16 @@ instance MemRep Word where
   fromMemRep 0 (Cons (Pick x) Nil) = x
   fromMemRep _ _                   = error "index out of range"
 
-  widths = [8]
-
   emptyFields = PTCons (STSucc 0 STZero) PTNil
 
+instance MemRep Double where
+  type Choices Double = 1
+  choices _ = 0
+
+  type Fields Double = '[ '[Double]]
+  fields x = Cons (Pick x) Nil
+
+  fromMemRep 0 (Cons (Pick x) Nil) = x
+  fromMemRep _ _                   = error "index out of range"
+
+  emptyFields = PTCons (STSucc 0 STZero) PTNil

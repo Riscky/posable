@@ -3,7 +3,7 @@
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Data.Type.MemRep.MemRep (MemRep(..), GMemRep(..)) where
+module Data.Type.MemRep.MemRep (MemRep(..), GMemRep(..), Generic) where
 
 import           Data.Finite                     (Finite)
 import           Generics.SOP                    hiding (Nil)
@@ -54,8 +54,6 @@ class (KnownNat (Choices x)) => MemRep x where
     , GMemRep (SOP I (Code x))
     ) => x -> Product (Fields x)
   fields x = gfields $ from x
-
-  widths :: [Int]
 
   emptyFields :: ProductType (Fields x)
 
