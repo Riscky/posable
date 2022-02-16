@@ -7,9 +7,11 @@
 -- This is needed to derive MemRep for tuples of size more then 4
 {-# OPTIONS_GHC -fconstraint-solver-iterations=8 #-}
 
+-- | This module contains instances of MemRep for all Haskell prelude data types
+--   as well as fixed size integers from Data.Int (Int8, Int16, Int32 and Int64)
 module Data.Type.MemRep.Instances (MemRep) where
 
-import           Data.Int                        (Int16, Int8)
+import           Data.Int                        (Int16, Int8, Int32, Int64)
 import           Data.Type.MemRep.MemRep
 import           Data.Type.MemRep.Representation
 
@@ -73,6 +75,30 @@ instance MemRep Int16 where
   choices _ = 0
 
   type Fields Int16 = '[ '[Int16]]
+  fields x = Cons (Pick x) Nil
+
+  fromMemRep 0 (Cons (Pick x) Nil) = x
+  fromMemRep _ _                   = error "index out of range"
+
+  emptyFields = PTCons (STSucc 0 STZero) PTNil
+
+instance MemRep Int32 where
+  type Choices Int32 = 1
+  choices _ = 0
+
+  type Fields Int32 = '[ '[Int32]]
+  fields x = Cons (Pick x) Nil
+
+  fromMemRep 0 (Cons (Pick x) Nil) = x
+  fromMemRep _ _                   = error "index out of range"
+
+  emptyFields = PTCons (STSucc 0 STZero) PTNil
+
+instance MemRep Int64 where
+  type Choices Int64 = 1
+  choices _ = 0
+
+  type Fields Int64 = '[ '[Int64]]
   fields x = Cons (Pick x) Nil
 
   fromMemRep 0 (Cons (Pick x) Nil) = x

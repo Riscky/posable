@@ -55,3 +55,6 @@ jobs:
 
     - name: "Run tests"
       run: "stack test"
+
+    - name: "Generate documentation with Haddock"
+      run: "stack haddock sizeof"

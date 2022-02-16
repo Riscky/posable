@@ -51,6 +51,8 @@ library
                        , Data.Type.MemRep.Instances
                        , Data.Type.MemRep.Representation
 
+  other-modules:         Examples
+
   -- LANGUAGE extensions used by modules in this package.
   -- other-extensions:
 
@@ -62,6 +64,7 @@ library
 
   -- Directories containing source files.
   hs-source-dirs:      src
+                     , examples
 
   default-extensions:  NoStarIsType
                      , DataKinds
@@ -70,22 +73,6 @@ library
                      , ScopedTypeVariables
                      , TypeFamilies
                      , GADTs
-
-  -- Base language which the package is written in.
-  default-language:    Haskell2010
-  ghc-options:         -Wall
-
-library sizeof-examples
-  exposed-modules:       Deriving
-  
-  -- Other library packages from which modules are imported.
-  build-depends:
-      sizeof
-    , base >=4.13
-    , ghc-typelits-knownnat >= 0.7.6
-
-  -- Directories containing source files.
-  hs-source-dirs:      examples
 
   -- Base language which the package is written in.
   default-language:    Haskell2010

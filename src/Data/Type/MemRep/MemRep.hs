@@ -11,7 +11,9 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 
-module Data.Type.MemRep.MemRep (MemRep(..), GMemRep(..), Generic) where
+-- | Exports the MemRep class and its generic implementation GMemRep.
+--   Also re-exports Generic.SOP, which is needed to derive MemRep.
+module Data.Type.MemRep.MemRep (MemRep(..), Generic) where
 
 import           Data.Finite                     (Finite, combineProduct,
                                                   combineSum, separateProduct,
@@ -27,8 +29,13 @@ import qualified Generics.SOP                    as SOP
 import           GHC.Base                        (Nat)
 import           GHC.TypeLits                    (KnownNat, type (*), type (+))
 
------------------------------------------------------------------------
--- MemRep, the king of this file
+-- | MemRep, the base of this library. Provide a compact memory representation
+--   for a type and a function to get back to the original type.
+--   This memory representation consist of `choices`, that represent all
+--   constructor choices in the type in a single Finite integer, and `fields`
+--   which represents all values in the type as a Product of Sums, which can
+--   be mapped to a struct-of-arrays representation for use in array-based
+--   languages like Accelerate.
 class (KnownNat (Choices x)) => MemRep x where
   type Choices x :: Nat
   type Choices x = GChoices (SOP I (Code x))
@@ -74,11 +81,9 @@ class (KnownNat (Choices x)) => MemRep x where
     ) => ProductType (Fields x)
   emptyFields  = gemptyFields @(SOP I (Code x))
 
---------------------------------------------------------------
--- Generics
 
 -----------------------------------------------------------------------
--- GMemRep, the serf of this file
+-- | Generic implementation of MemRep,
 class (KnownNat (GChoices x)) => GMemRep x where
   type GChoices x :: Nat
   gchoices :: x -> Finite (GChoices x)
@@ -102,14 +107,14 @@ instance
   type GChoices (SOP I xss) = Sums (MapProducts (Map2Choices xss))
   gchoices x = sums $ mapProducts $ map2choices $ unSOP x
 
-  type GFields (SOP I xss) = FoldMerge (MapAppends (Map2Fields xss))
+  type GFields (SOP I xss) = FoldMerge (MapConcat (Map2Fields xss))
   gfields (SOP x)         = foldMerge
-                              (mapAppendsT (pureMap2Fields @xss))
-                              (mapAppends (map2Fields x))
+                              (mapConcatT (pureMap2Fields @xss))
+                              (mapConcat (map2Fields x))
 
-  gemptyFields = foldMergeT $ mapAppendsT (pureMap2Fields @xss)
+  gemptyFields = foldMergeT $ mapConcatT (pureMap2Fields @xss)
 
-  gfromMemRep cs fs = SOP (mapFromMemRep cs' fs (pureAppendsFields @xss))
+  gfromMemRep cs fs = SOP (mapFromMemRep cs' fs (pureConcatFields @xss))
     where
       cs' = unSums cs (pureChoices2 @xss)
 
@@ -185,11 +190,11 @@ map2Fields :: (All2 MemRep xss) => NS (NP I) xss -> NS (NP Product) (Map2Fields 
 map2Fields (Z x)  = Z (mapFields x)
 map2Fields (S xs) = S (map2Fields xs)
 
-mapAppends :: NS (NP Product) xss -> NS Product (MapAppends xss)
-mapAppends (Z x)  = Z (appends x)
-mapAppends (S xs) = S (mapAppends xs)
+mapConcat :: NS (NP Product) xss -> NS Product (MapConcat xss)
+mapConcat (Z x)  = Z (appends x)
+mapConcat (S xs) = S (mapConcat xs)
 
-appends :: NP Product xs -> Product (Appends xs)
+appends :: NP Product xs -> Product (Concat xs)
 appends SOP.Nil   = Nil
 appends (x :* xs) = concatP x (appends xs)
 
@@ -198,13 +203,13 @@ foldMerge SOP.Nil   _      = Nil
 foldMerge (_ :* xs) (Z y)  = zipSumLeft y (foldMergeT xs)
 foldMerge (x :* xs) (S ys) = zipSumRight x (foldMerge xs ys)
 
-appendsT :: NP ProductType xs -> ProductType (Appends xs)
+appendsT :: NP ProductType xs -> ProductType (Concat xs)
 appendsT SOP.Nil   = PTNil
 appendsT (x :* xs) = concatPT x (appendsT xs)
 
-mapAppendsT :: NP (NP ProductType) xss -> NP ProductType (MapAppends xss)
-mapAppendsT SOP.Nil   = SOP.Nil
-mapAppendsT (x :* xs) = appendsT x :* mapAppendsT xs
+mapConcatT :: NP (NP ProductType) xss -> NP ProductType (MapConcat xss)
+mapConcatT SOP.Nil   = SOP.Nil
+mapConcatT (x :* xs) = appendsT x :* mapConcatT xs
 
 foldMergeT :: NP ProductType xss -> ProductType (FoldMerge xss)
 foldMergeT SOP.Nil   = PTNil
@@ -217,7 +222,7 @@ newtype ProductFields a = ProductFields (Product (Fields a))
 
 newtype ProductFieldsT a = ProductFieldsT (ProductType (Fields a))
 
-newtype ProductAppendsFieldsT a = ProductAppendsFieldsT (ProductType (Appends (MapFields a)))
+newtype ProductConcatFieldsT a = ProductConcatFieldsT (ProductType (Concat (MapFields a)))
 
 newtype ProductMapFieldsT a = ProductMapFieldsT (NP ProductType (MapFields a))
 
@@ -247,12 +252,12 @@ pure2Fields = cpure_NP (Proxy :: Proxy (All MemRep)) pureProductMapFieldsT
     pureProductMapFieldsT :: forall xs . (All MemRep xs) => ProductMapFieldsT xs
     pureProductMapFieldsT = ProductMapFieldsT $ pureMapFields @xs
 
-pureAppendsFields :: forall xss . (All2 MemRep xss) => NP ProductAppendsFieldsT xss
-pureAppendsFields = convert $ pure2Fields @xss
+pureConcatFields :: forall xss . (All2 MemRep xss) => NP ProductConcatFieldsT xss
+pureConcatFields = convert $ pure2Fields @xss
   where
-    convert :: NP ProductMapFieldsT yss -> NP ProductAppendsFieldsT yss
+    convert :: NP ProductMapFieldsT yss -> NP ProductConcatFieldsT yss
     convert SOP.Nil         = SOP.Nil
-    convert (ProductMapFieldsT x :* xs) = ProductAppendsFieldsT (appendsT x) :* convert xs
+    convert (ProductMapFieldsT x :* xs) = ProductConcatFieldsT (appendsT x) :* convert xs
 
 --------------------------------------------------------------------------------
 -- Functions that deal with creating Choices from types
@@ -302,9 +307,9 @@ zipFromMemRep :: All MemRep xs => NP FChoices xs -> NP ProductFields xs -> NP I 
 zipFromMemRep SOP.Nil SOP.Nil = SOP.Nil
 zipFromMemRep (FChoices c :* cs) (ProductFields f :* fs) = I (fromMemRep c f) :* zipFromMemRep cs fs
 
-foldMergeT2 :: NP ProductAppendsFieldsT xss -> ProductType (FoldMerge (MapAppends (Map2Fields xss)))
+foldMergeT2 :: NP ProductConcatFieldsT xss -> ProductType (FoldMerge (MapConcat (Map2Fields xss)))
 foldMergeT2 SOP.Nil                         = PTNil
-foldMergeT2 (ProductAppendsFieldsT x :* xs) = zipSumT x (foldMergeT2 xs)
+foldMergeT2 (ProductConcatFieldsT x :* xs) = zipSumT x (foldMergeT2 xs)
 
 unSums :: (All KnownNat (MapProducts (Map2Choices xs))) => Finite (Sums (MapProducts (Map2Choices xs))) -> NP ProductsMapChoices xs -> NS ProductsMapChoices xs
 unSums _ SOP.Nil = error "Cannot construct empty sum"
@@ -312,20 +317,20 @@ unSums x (_ :* ys) = case separateSum x of
   Left x'  -> Z (ProductsMapChoices x')
   Right x' -> S (unSums x' ys)
 
-mapFromMemRep :: forall xss . (All2 KnownNat (Map2Choices xss), All2 MemRep xss) => NS ProductsMapChoices xss -> Product (FoldMerge (MapAppends (Map2Fields xss))) -> NP ProductAppendsFieldsT xss -> NS (NP I) xss
-mapFromMemRep (Z cs) fs fts = Z (zipFromMemRep cs' ( unAppends (unMergeLeft fs fts) pureFields))
+mapFromMemRep :: forall xss . (All2 KnownNat (Map2Choices xss), All2 MemRep xss) => NS ProductsMapChoices xss -> Product (FoldMerge (MapConcat (Map2Fields xss))) -> NP ProductConcatFieldsT xss -> NS (NP I) xss
+mapFromMemRep (Z cs) fs fts = Z (zipFromMemRep cs' ( unConcat (unMergeLeft fs fts) pureFields))
   where
     cs' = separateProducts cs pureChoices
 mapFromMemRep (S cs) fs fts = S (mapFromMemRep cs (unMergeRight fs fts) (tl fts))
 
-unAppends :: Product (Appends (MapFields xs)) -> NP ProductFieldsT xs -> NP ProductFields xs
-unAppends Nil SOP.Nil     = SOP.Nil
-unAppends xs  (ProductFieldsT ys :* yss) = ProductFields x' :* unAppends xs' yss
+unConcat :: Product (Concat (MapFields xs)) -> NP ProductFieldsT xs -> NP ProductFields xs
+unConcat Nil SOP.Nil     = SOP.Nil
+unConcat xs  (ProductFieldsT ys :* yss) = ProductFields x' :* unConcat xs' yss
   where
     (x', xs') = unConcatP xs ys
 
-unMergeLeft :: forall xs xss . Product (Merge (Appends (MapFields xs)) (FoldMerge (MapAppends (Map2Fields xss)))) -> NP ProductAppendsFieldsT (xs ': xss) -> Product (Appends (MapFields xs))
-unMergeLeft xs (ProductAppendsFieldsT y :* ys) = splitProductLeft xs y (foldMergeT2 @xss ys)
+unMergeLeft :: forall xs xss . Product (Merge (Concat (MapFields xs)) (FoldMerge (MapConcat (Map2Fields xss)))) -> NP ProductConcatFieldsT (xs ': xss) -> Product (Concat (MapFields xs))
+unMergeLeft xs (ProductConcatFieldsT y :* ys) = splitProductLeft xs y (foldMergeT2 @xss ys)
 
-unMergeRight :: forall xs xss . Product (Merge (Appends (MapFields xs)) (FoldMerge (MapAppends (Map2Fields xss)))) -> NP ProductAppendsFieldsT (xs ': xss) -> Product (FoldMerge (MapAppends (Map2Fields xss)))
-unMergeRight xs (ProductAppendsFieldsT y :* ys) = splitProductRight xs y (foldMergeT2 @xss ys)
+unMergeRight :: forall xs xss . Product (Merge (Concat (MapFields xs)) (FoldMerge (MapConcat (Map2Fields xss)))) -> NP ProductConcatFieldsT (xs ': xss) -> Product (FoldMerge (MapConcat (Map2Fields xss)))
+unMergeRight xs (ProductConcatFieldsT y :* ys) = splitProductRight xs y (foldMergeT2 @xss ys)

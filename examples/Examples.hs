@@ -7,7 +7,8 @@
 -- Larger types need more iterations
 {-# OPTIONS_GHC -fconstraint-solver-iterations=11 #-}
 
-module Deriving where
+-- | Contains an example for deriving MemRep for some datatype
+module Examples () where
 
 -- MemRep re-exports SOP.Generic
 import           Data.Type.MemRep.MemRep as MemRep
@@ -19,3 +20,4 @@ data Test a b c = C1 a
                 | C4 a a a a a a a
                 | C5 a b c
     deriving (GHC.Generic, MemRep.Generic, MemRep)
+
