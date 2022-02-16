@@ -4,7 +4,7 @@
 
 -- | This module exports the Product and Sum type, and type- and valuelevel
 --   functions on these types.
-module Data.Type.MemRep.Representation
+module Data.Type.POSable.Representation
   ( type (++)
   , ProductType(..)
   , concatPT

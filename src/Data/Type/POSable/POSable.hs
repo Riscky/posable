@@ -11,14 +11,14 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 
--- | Exports the MemRep class and its generic implementation GMemRep.
---   Also re-exports Generic.SOP, which is needed to derive MemRep.
-module Data.Type.MemRep.MemRep (MemRep(..), Generic) where
+-- | Exports the POSable class and its generic implementation GPOSable.
+--   Also re-exports Generic.SOP, which is needed to derive POSable.
+module Data.Type.POSable.POSable (POSable(..), Generic) where
 
 import           Data.Finite                     (Finite, combineProduct,
                                                   combineSum, separateProduct,
                                                   separateSum)
-import           Data.Type.MemRep.Representation
+import           Data.Type.POSable.Representation
 import           Generics.SOP                    hiding (Nil)
 import           Generics.SOP.NP                 hiding (Nil)
 
@@ -29,21 +29,21 @@ import qualified Generics.SOP                    as SOP
 import           GHC.Base                        (Nat)
 import           GHC.TypeLits                    (KnownNat, type (*), type (+))
 
--- | MemRep, the base of this library. Provide a compact memory representation
+-- | POSable, the base of this library. Provide a compact memory representation
 --   for a type and a function to get back to the original type.
 --   This memory representation consist of `choices`, that represent all
 --   constructor choices in the type in a single Finite integer, and `fields`
 --   which represents all values in the type as a Product of Sums, which can
 --   be mapped to a struct-of-arrays representation for use in array-based
 --   languages like Accelerate.
-class (KnownNat (Choices x)) => MemRep x where
+class (KnownNat (Choices x)) => POSable x where
   type Choices x :: Nat
   type Choices x = GChoices (SOP I (Code x))
 
   choices :: x -> Finite (Choices x)
   default choices ::
     ( Generic x
-    , (GMemRep (SOP I (Code x)))
+    , (GPOSable (SOP I (Code x)))
     , GChoices (SOP I (Code x)) ~ Choices x
     ) => x -> Finite (Choices x)
   choices x = gchoices $ from x
@@ -51,15 +51,15 @@ class (KnownNat (Choices x)) => MemRep x where
   emptyChoices :: Finite (Choices x)
   emptyChoices = 0
 
-  fromMemRep :: Finite (Choices x) -> Product (Fields x) -> x
+  fromPOSable :: Finite (Choices x) -> Product (Fields x) -> x
 
-  default fromMemRep ::
+  default fromPOSable ::
     ( Generic x
-    , (GMemRep (SOP I (Code x)))
+    , (GPOSable (SOP I (Code x)))
     , Fields x ~ GFields (SOP I (Code x))
     , Choices x ~ GChoices (SOP I (Code x))
     ) => Finite (Choices x) -> Product (Fields x) -> x
-  fromMemRep cs fs = to $ gfromMemRep cs fs
+  fromPOSable cs fs = to $ gfromPOSable cs fs
 
   type Fields x :: [[Type]]
   type Fields x = GFields (SOP I (Code x))
@@ -69,40 +69,40 @@ class (KnownNat (Choices x)) => MemRep x where
   default fields ::
     ( Generic x
     , Fields x ~ GFields (SOP I (Code x))
-    , GMemRep (SOP I (Code x))
+    , GPOSable (SOP I (Code x))
     ) => x -> Product (Fields x)
   fields x = gfields $ from x
 
   emptyFields :: ProductType (Fields x)
 
   default emptyFields ::
-    ( GMemRep (SOP I (Code x))
+    ( GPOSable (SOP I (Code x))
     , Fields x ~ GFields (SOP I (Code x))
     ) => ProductType (Fields x)
   emptyFields  = gemptyFields @(SOP I (Code x))
 
 
 -----------------------------------------------------------------------
--- | Generic implementation of MemRep,
-class (KnownNat (GChoices x)) => GMemRep x where
+-- | Generic implementation of POSable,
+class (KnownNat (GChoices x)) => GPOSable x where
   type GChoices x :: Nat
   gchoices :: x -> Finite (GChoices x)
 
   type GFields x :: [[Type]]
   gfields :: x -> Product (GFields x)
 
-  gfromMemRep :: Finite (GChoices x) -> Product (GFields x) -> x
+  gfromPOSable :: Finite (GChoices x) -> Product (GFields x) -> x
 
   gemptyFields :: ProductType (GFields x)
 
 -----------------------------------------------------------------------
--- Generic instance for MemRep
+-- Generic instance for POSable
 instance
-  ( All2 MemRep xss
+  ( All2 POSable xss
   , KnownNat (Sums (MapProducts (Map2Choices xss)))
   , All2 KnownNat (Map2Choices xss)
   , All KnownNat (MapProducts (Map2Choices xss))
-  ) => GMemRep (SOP I xss) where
+  ) => GPOSable (SOP I xss) where
 
   type GChoices (SOP I xss) = Sums (MapProducts (Map2Choices xss))
   gchoices x = sums $ mapProducts $ map2choices $ unSOP x
@@ -114,7 +114,7 @@ instance
 
   gemptyFields = foldMergeT $ mapConcatT (pureMap2Fields @xss)
 
-  gfromMemRep cs fs = SOP (mapFromMemRep cs' fs (pureConcatFields @xss))
+  gfromPOSable cs fs = SOP (mapFromPOSable cs' fs (pureConcatFields @xss))
     where
       cs' = unSums cs (pureChoices2 @xss)
 
@@ -158,11 +158,11 @@ type family Sums (xs :: f Nat) :: Nat where
 -- Functions that deal with Choices
 --------------------------------------------------------------------------------
 
-mapChoices :: forall xs . (All MemRep xs) => NP I xs -> NP Finite (MapChoices xs)
+mapChoices :: forall xs . (All POSable xs) => NP I xs -> NP Finite (MapChoices xs)
 mapChoices SOP.Nil   = SOP.Nil
 mapChoices (x :* xs) = choices (unI x) :* mapChoices xs
 
-map2choices :: (All2 MemRep xss) => NS (NP I) xss -> NS (NP Finite) (Map2Choices xss)
+map2choices :: (All2 POSable xss) => NS (NP I) xss -> NS (NP Finite) (Map2Choices xss)
 map2choices (Z x)  = Z (mapChoices x)
 map2choices (S xs) = S (map2choices xs)
 
@@ -182,11 +182,11 @@ combineProducts (y :* ys) = combineProduct (y, combineProducts ys)
 -- Functions that deal with Fields
 --------------------------------------------------------------------------------
 
-mapFields :: forall xs . (All MemRep xs) => NP I xs -> NP Product (MapFields xs)
+mapFields :: forall xs . (All POSable xs) => NP I xs -> NP Product (MapFields xs)
 mapFields SOP.Nil   = SOP.Nil
 mapFields (x :* xs) = fields (unI x) :* mapFields xs
 
-map2Fields :: (All2 MemRep xss) => NS (NP I) xss -> NS (NP Product) (Map2Fields xss)
+map2Fields :: (All2 POSable xss) => NS (NP I) xss -> NS (NP Product) (Map2Fields xss)
 map2Fields (Z x)  = Z (mapFields x)
 map2Fields (S xs) = S (map2Fields xs)
 
@@ -226,33 +226,33 @@ newtype ProductConcatFieldsT a = ProductConcatFieldsT (ProductType (Concat (MapF
 
 newtype ProductMapFieldsT a = ProductMapFieldsT (NP ProductType (MapFields a))
 
-pureMapFields :: forall xs . (All MemRep xs) => NP ProductType (MapFields xs)
+pureMapFields :: forall xs . (All POSable xs) => NP ProductType (MapFields xs)
 pureMapFields = convert $ pureFields @xs
   where
     convert :: NP ProductFieldsT ys -> NP ProductType (MapFields ys)
     convert SOP.Nil                  = SOP.Nil
     convert (ProductFieldsT x :* xs) = x :* convert xs
 
-pureFields :: (All MemRep xs) => NP ProductFieldsT xs
-pureFields = cpure_NP (Proxy :: Proxy MemRep) pureProductFields
+pureFields :: (All POSable xs) => NP ProductFieldsT xs
+pureFields = cpure_NP (Proxy :: Proxy POSable) pureProductFields
   where
-    pureProductFields :: forall x . (MemRep x) => ProductFieldsT x
+    pureProductFields :: forall x . (POSable x) => ProductFieldsT x
     pureProductFields = ProductFieldsT $ emptyFields @x
 
-pureMap2Fields :: forall xss . (All2 MemRep xss) => NP (NP ProductType) (Map2Fields xss)
+pureMap2Fields :: forall xss . (All2 POSable xss) => NP (NP ProductType) (Map2Fields xss)
 pureMap2Fields = convert $ pure2Fields @xss
   where
     convert :: NP ProductMapFieldsT yss -> NP (NP ProductType) (Map2Fields yss)
     convert SOP.Nil                     = SOP.Nil
     convert (ProductMapFieldsT x :* xs) = x :* convert xs
 
-pure2Fields :: (All2 MemRep zss) => NP ProductMapFieldsT zss
-pure2Fields = cpure_NP (Proxy :: Proxy (All MemRep)) pureProductMapFieldsT
+pure2Fields :: (All2 POSable zss) => NP ProductMapFieldsT zss
+pure2Fields = cpure_NP (Proxy :: Proxy (All POSable)) pureProductMapFieldsT
   where
-    pureProductMapFieldsT :: forall xs . (All MemRep xs) => ProductMapFieldsT xs
+    pureProductMapFieldsT :: forall xs . (All POSable xs) => ProductMapFieldsT xs
     pureProductMapFieldsT = ProductMapFieldsT $ pureMapFields @xs
 
-pureConcatFields :: forall xss . (All2 MemRep xss) => NP ProductConcatFieldsT xss
+pureConcatFields :: forall xss . (All2 POSable xss) => NP ProductConcatFieldsT xss
 pureConcatFields = convert $ pure2Fields @xss
   where
     convert :: NP ProductMapFieldsT yss -> NP ProductConcatFieldsT yss
@@ -268,30 +268,30 @@ newtype ProductsMapChoices a = ProductsMapChoices (Finite (Products (MapChoices 
 
 newtype FMapChoices a = FMapChoices (NP Finite (MapChoices a))
 
-pureChoices2 :: forall xss . (All2 KnownNat (Map2Choices xss)) => (All2 MemRep xss) => NP ProductsMapChoices xss
+pureChoices2 :: forall xss . (All2 KnownNat (Map2Choices xss)) => (All2 POSable xss) => NP ProductsMapChoices xss
 pureChoices2 = convert $ pure2Choices @xss
   where
     convert :: (All2 KnownNat (Map2Choices yss)) => NP FMapChoices yss -> NP ProductsMapChoices yss
     convert SOP.Nil         = SOP.Nil
     convert (FMapChoices x :* xs) = ProductsMapChoices (combineProducts x) :* convert xs
 
-pureMapChoices :: forall xs . (All MemRep xs) => NP Finite (MapChoices xs)
+pureMapChoices :: forall xs . (All POSable xs) => NP Finite (MapChoices xs)
 pureMapChoices = convert $ pureChoices @xs
   where
     convert :: NP FChoices ys -> NP Finite (MapChoices ys)
     convert SOP.Nil            = SOP.Nil
     convert (FChoices x :* xs) = x :* convert xs
 
-pureChoices :: (All MemRep xs) => NP FChoices xs
-pureChoices = cpure_NP (Proxy :: Proxy MemRep) pureFChoices
+pureChoices :: (All POSable xs) => NP FChoices xs
+pureChoices = cpure_NP (Proxy :: Proxy POSable) pureFChoices
   where
-    pureFChoices :: forall x . (MemRep x) => FChoices x
+    pureFChoices :: forall x . (POSable x) => FChoices x
     pureFChoices = FChoices $ emptyChoices @x
 
-pure2Choices :: (All2 MemRep xss) => NP FMapChoices xss
-pure2Choices = cpure_NP (Proxy :: Proxy (All MemRep)) pureFMapChoices
+pure2Choices :: (All2 POSable xss) => NP FMapChoices xss
+pure2Choices = cpure_NP (Proxy :: Proxy (All POSable)) pureFMapChoices
   where
-    pureFMapChoices :: forall xs . (All MemRep xs) => FMapChoices xs
+    pureFMapChoices :: forall xs . (All POSable xs) => FMapChoices xs
     pureFMapChoices = FMapChoices $ pureMapChoices @xs
 
 -------------------------------------------------------
@@ -303,9 +303,9 @@ separateProducts (ProductsMapChoices x) (_ :* ys) = FChoices x' :* separateProdu
   where
     (x', xs)  = separateProduct x
 
-zipFromMemRep :: All MemRep xs => NP FChoices xs -> NP ProductFields xs -> NP I xs
-zipFromMemRep SOP.Nil SOP.Nil = SOP.Nil
-zipFromMemRep (FChoices c :* cs) (ProductFields f :* fs) = I (fromMemRep c f) :* zipFromMemRep cs fs
+zipFromPOSable :: All POSable xs => NP FChoices xs -> NP ProductFields xs -> NP I xs
+zipFromPOSable SOP.Nil SOP.Nil = SOP.Nil
+zipFromPOSable (FChoices c :* cs) (ProductFields f :* fs) = I (fromPOSable c f) :* zipFromPOSable cs fs
 
 foldMergeT2 :: NP ProductConcatFieldsT xss -> ProductType (FoldMerge (MapConcat (Map2Fields xss)))
 foldMergeT2 SOP.Nil                         = PTNil
@@ -317,11 +317,11 @@ unSums x (_ :* ys) = case separateSum x of
   Left x'  -> Z (ProductsMapChoices x')
   Right x' -> S (unSums x' ys)
 
-mapFromMemRep :: forall xss . (All2 KnownNat (Map2Choices xss), All2 MemRep xss) => NS ProductsMapChoices xss -> Product (FoldMerge (MapConcat (Map2Fields xss))) -> NP ProductConcatFieldsT xss -> NS (NP I) xss
-mapFromMemRep (Z cs) fs fts = Z (zipFromMemRep cs' ( unConcat (unMergeLeft fs fts) pureFields))
+mapFromPOSable :: forall xss . (All2 KnownNat (Map2Choices xss), All2 POSable xss) => NS ProductsMapChoices xss -> Product (FoldMerge (MapConcat (Map2Fields xss))) -> NP ProductConcatFieldsT xss -> NS (NP I) xss
+mapFromPOSable (Z cs) fs fts = Z (zipFromPOSable cs' ( unConcat (unMergeLeft fs fts) pureFields))
   where
     cs' = separateProducts cs pureChoices
-mapFromMemRep (S cs) fs fts = S (mapFromMemRep cs (unMergeRight fs fts) (tl fts))
+mapFromPOSable (S cs) fs fts = S (mapFromPOSable cs (unMergeRight fs fts) (tl fts))
 
 unConcat :: Product (Concat (MapFields xs)) -> NP ProductFieldsT xs -> NP ProductFields xs
 unConcat Nil SOP.Nil     = SOP.Nil

@@ -3,7 +3,7 @@ cabal-version:       2.2
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 -- The name of the package.
-name:                sizeof
+name:                posable
 
 -- The package version.  See the Haskell package versioning policy (PVP)
 -- for standards guiding when and how versions should be incremented.
@@ -47,9 +47,9 @@ build-type:          Simple
 
 library
   -- Modules included in this executable, other than Main.
-  exposed-modules:       Data.Type.MemRep.MemRep
-                       , Data.Type.MemRep.Instances
-                       , Data.Type.MemRep.Representation
+  exposed-modules:       Data.Type.POSable.POSable
+                       , Data.Type.POSable.Instances
+                       , Data.Type.POSable.Representation
 
   other-modules:         Examples
 

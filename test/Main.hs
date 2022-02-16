@@ -8,9 +8,9 @@
 
 module Main where
 
-import           Data.Type.MemRep.Instances      ()
-import           Data.Type.MemRep.MemRep         as MemRep
-import           Data.Type.MemRep.Representation
+import           Data.Type.POSable.Instances      ()
+import           Data.Type.POSable.POSable         as POSable
+import           Data.Type.POSable.Representation
 import           GHC.Generics                    as GHC
 import           Test.Tasty                      (TestTree, defaultMain,
                                                   testGroup)
@@ -77,13 +77,13 @@ tests = testGroup "Test Choices and Fields of basic data types"
   ]
 
 data LONGSUM = A | B | C | D | E | F | G | H | I | J | K | L | M | N | O | P | Q | R | S | T | U | V | W | X | Y | Z
-    deriving (Show, Eq, GHC.Generic, MemRep.Generic, MemRep)
+    deriving (Show, Eq, GHC.Generic, POSable.Generic, POSable)
 
 instance Arbitrary LONGSUM where
     arbitrary = elements [A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z]
 
 data LONGPRODUCT = LONGPRODUCT Int Float Double Char Word Int Float Double Char Word Int Float Double Char Word Int Float Double Char Word
-    deriving (Show, Eq, GHC.Generic, MemRep.Generic, MemRep)
+    deriving (Show, Eq, GHC.Generic, POSable.Generic, POSable)
 
 instance Arbitrary LONGPRODUCT where
     arbitrary = LONGPRODUCT <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
@@ -100,5 +100,5 @@ tupleOfEithers = (Left 1, Right 2.3)
 eitherOfTuples :: Either (Int, Float) (Float, Int)
 eitherOfTuples = Left (1,3.4)
 
-propInjectivity :: (MemRep a, Arbitrary a, Eq a) => a -> Bool
-propInjectivity x = fromMemRep (choices x) (fields x) == x
+propInjectivity :: (POSable a, Arbitrary a, Eq a) => a -> Bool
+propInjectivity x = fromPOSable (choices x) (fields x) == x

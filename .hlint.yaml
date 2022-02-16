@@ -1,4 +1,4 @@
-# Duplicated from sizeof.cabal
+# Duplicated from posable.cabal
 - arguments:
   - "-XNoStarIsType"
   - "-XDataKinds"

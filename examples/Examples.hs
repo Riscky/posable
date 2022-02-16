@@ -1,4 +1,4 @@
--- Needed to derive MemRep
+-- Needed to derive POSable
 {-# LANGUAGE DeriveAnyClass #-}
 -- Needed to derive GHC.Generic
 {-# LANGUAGE DeriveGeneric  #-}
@@ -7,11 +7,11 @@
 -- Larger types need more iterations
 {-# OPTIONS_GHC -fconstraint-solver-iterations=11 #-}
 
--- | Contains an example for deriving MemRep for some datatype
+-- | Contains an example for deriving POSable for some datatype
 module Examples () where
 
--- MemRep re-exports SOP.Generic
-import           Data.Type.MemRep.MemRep as MemRep
+-- POSable re-exports SOP.Generic
+import           Data.Type.POSable.POSable as POSable
 import           GHC.Generics            as GHC
 
 data Test a b c = C1 a
@@ -19,5 +19,5 @@ data Test a b c = C1 a
                 | C3 c
                 | C4 a a a a a a a
                 | C5 a b c
-    deriving (GHC.Generic, MemRep.Generic, MemRep)
+    deriving (GHC.Generic, POSable.Generic, POSable)
 
