@@ -11,7 +11,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 
--- | Exports the POSable class and its generic implementation GPOSable.
+-- | Exports the `POSable` class, which has a generic implementation `GPOSable`.
 --   Also re-exports Generic.SOP, which is needed to derive POSable.
 module Data.Type.POSable.POSable (POSable(..), Generic) where
 

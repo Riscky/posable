@@ -7,8 +7,8 @@
 -- This is needed to derive POSable for tuples of size more then 4
 {-# OPTIONS_GHC -fconstraint-solver-iterations=8 #-}
 
--- | This module contains instances of POSable for all Haskell prelude data types
---   as well as fixed size integers from Data.Int (Int8, Int16, Int32 and Int64)
+-- | This module contains instances of `POSable` for all Haskell prelude data types
+--   as well as fixed size integers from Data.Int (`Int8`, `Int16`, `Int32` and `Int64`)
 module Data.Type.POSable.Instances (POSable) where
 
 import           Data.Int                         (Int16, Int32, Int64, Int8)

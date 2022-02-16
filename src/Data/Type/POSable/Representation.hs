@@ -2,7 +2,7 @@
 {-# LANGUAGE StandaloneDeriving   #-}
 {-# LANGUAGE UndecidableInstances #-}
 
--- | This module exports the Product and Sum type, and type- and valuelevel
+-- | This module exports the `Product` and `Sum` type, and type- and valuelevel
 --   functions on these types.
 module Data.Type.POSable.Representation
   ( type (++)
@@ -36,7 +36,7 @@ infixr 5 ++
 -----------------------------------------------------------------------
 -- Heterogeneous lists with explicit types
 
--- | Typelevel product of sums without values
+-- | Type witness for `Product`
 data ProductType :: [[Type]] -> Type where
   PTNil :: ProductType '[]
   PTCons :: SumType x -> ProductType xs -> ProductType (x ': xs)
@@ -45,12 +45,12 @@ instance (All2 Show xs) => Show (ProductType xs) where
   show PTNil         = "PTNil"
   show (PTCons a as) = "PTCons " ++ show a ++ " (" ++ show as ++ ")"
 
--- | Concatenates ProductType values
+-- | Concatenates `ProductType` values
 concatPT :: ProductType x -> ProductType y -> ProductType (x ++ y)
 concatPT PTNil ys         = ys
 concatPT (PTCons x xs) ys = PTCons x (concatPT xs ys)
 
--- | Typelevel product of sums with values
+-- | Typelevel product of `Sum`s with values
 data Product :: [[Type]] -> Type where
   Nil :: Product '[]
   Cons :: Sum x -> Product xs -> Product (x ': xs)
@@ -61,13 +61,12 @@ instance (All2 Show xs) => Show (Product xs) where
   show Nil         = "Nil"
   show (Cons a as) = "Cons " ++ show a ++ " (" ++ show as ++ ")"
 
--- | Concatenates Product values
+-- | Concatenates `Product` values
 concatP :: Product x -> Product y -> Product (x ++ y)
 concatP Nil         ys = ys
 concatP (Cons x xs) ys = Cons x (concatP xs ys)
 
--- | Represent the type of a typelevel sum as a list where each type has a
---   value
+-- | Type witness for `Sum`
 data SumType :: [Type] -> Type where
   STSucc :: x -> SumType xs -> SumType (x ': xs)
   STZero :: SumType '[]
@@ -90,29 +89,69 @@ instance (All Show x) => Show (Sum x) where
   show (Skip x) = "Skip " ++ show x
   show Undef    = "Undef"
 
+-- only used in examples
+data A
+data B
+data C
+data D
+data E
+data F
+data G
+data H
+
 ----------------------------------------
 -- Type functions on lists
 
 -- | Concatenate a list of lists, typelevel equivalent of
---   `concat :: [[a]] -> [a]`
+--
+-- > concat :: [[a]] -> [a]`
+--
+--    Example:
+--
+-- >>> :kind! Concat '[ '[A, B], '[C, D]]
+-- Concat '[ '[A, B], '[C, D]] :: [Type]
+-- = '[A, B, C, D]
+--
 type family Concat (xss :: f (g x)) :: g x where
   Concat '[] = '[]
   Concat (xs ': xss) = xs ++ Concat xss
 
 -- | Map `Concat` over a list (of lists, of lists), typelevel equivalent of
---   `map . concat :: [[[a]]] -> [[a]]`
+--
+-- > map . concat :: [[[a]]] -> [[a]]
+--
+--   Example:
+--
+-- >>> :kind! MapConcat '[ '[ '[A, B], '[C, D]], '[[E, F], '[G, H]]]
+-- MapConcat '[ '[ '[A, B], '[C, D]], '[[E, F], '[G, H]]] :: [[Type]]
+-- = '[ '[A, B, C, D], '[E, F, G, H]]
+--
 type family MapConcat (xsss :: f (g (h x))) :: f (h x) where
   MapConcat '[] = '[]
   MapConcat (xss ': xsss) = Concat xss ': MapConcat xsss
 
--- | Zip two lists of lists with ++ as operator, while keeping the length of
---   the longest list
-type family Merge (xs :: f x) (ys :: f y) :: f z where
+-- | Zip two lists of lists with  ++` as operator, while keeping the length of
+--   the longest outer list
+--
+--   Example:
+--
+-- >>> :kind! Merge '[ '[A, B, C], '[D, E]] '[ '[F, G]]
+-- Merge '[ '[A, B, C], '[D, E]] '[ '[F, G]] :: [[Type]]
+-- = '[ '[A, B, C, F, G], '[D, E]]
+--
+type family Merge (xs :: f (g x)) (ys :: g (f x)) :: g (f x) where
   Merge '[] bs = bs
   Merge as '[] = as
   Merge (a ': as) (b ': bs) = (a ++ b) ': Merge as bs
 
 -- | Fold `Merge` over a list (of lists, of lists)
+--
+--   Example:
+--
+-- >>> :kind! FoldMerge '[ '[ '[A, B, C], '[D, E]], '[ '[F, G]], '[ '[H]]]
+-- FoldMerge '[ '[ '[A, B, C], '[D, E]], '[ '[F, G]], '[ '[H]]] :: [[Type]]
+-- = '[ '[A, B, C, F, G, H], '[D, E]]
+--
 type family FoldMerge (xss :: f (g x)) :: g x where
   FoldMerge '[] = '[]
   FoldMerge (a ': as) = Merge a (FoldMerge as)
@@ -120,8 +159,8 @@ type family FoldMerge (xss :: f (g x)) :: g x where
 ----------------------------------------
 -- Functions on Products and Sums
 
--- | Merge a ProductType and a Product, putting the values of the Product in
---   the right argument of Merge
+-- | Merge a `ProductType` and a `Product`, putting the values of the `Product` in
+--   the right argument of `Merge`
 zipSumRight :: ProductType l -> Product r -> Product (Merge l r)
 zipSumRight (PTCons x xs) (Cons y ys) = Cons (takeRight x y) (zipSumRight xs ys)
 zipSumRight PTNil ys                  = ys
@@ -131,8 +170,8 @@ makeUndefProduct :: ProductType x -> Product x
 makeUndefProduct (PTCons y ys) = Cons (makeEmpty y) (makeUndefProduct ys)
 makeUndefProduct PTNil         = Nil
 
--- | Merge a ProductType and a Product, putting the values of the Product in
---   the left argument of Merge
+-- | Merge a `ProductType` and a `Product`, putting the values of the `Product`
+--   in the left argument of `Merge`
 zipSumLeft :: Product l -> ProductType r -> Product (Merge l r)
 zipSumLeft (Cons x xs) (PTCons y ys) = Cons (takeLeft x y) (zipSumLeft xs ys)
 zipSumLeft Nil         (PTCons y ys) = Cons (makeEmpty y) (zipSumLeft Nil ys)
@@ -161,15 +200,15 @@ takeRight :: SumType l -> Sum r -> Sum (l ++ r)
 takeRight (STSucc _ ls) rs = Skip (takeRight ls rs)
 takeRight STZero        rs = rs
 
--- | UnMerge a Product, using two `ProductType`s as witnesses for the left and
---   right argument of Merge. Produces a value of type Product right
+-- | UnMerge a `Product`, using two `ProductType`s as witnesses for the left and
+--   right argument of `Merge`. Produces a value of type Product right
 splitProductRight :: Product (Merge l r) -> ProductType l -> ProductType r -> Product r
 splitProductRight xs PTNil _ = xs
 splitProductRight _  _ PTNil = Nil
 splitProductRight (Cons x xs) (PTCons l ls) (PTCons r rs) = Cons (splitSumRight x l r) (splitProductRight xs ls rs)
 
--- | UnMerge a Product, using two `ProductType`s as witnesses for the left and
---   right argument of Merge. Produces a value of type Product left
+-- | UnMerge a `Product`, using two `ProductType`s as witnesses for the left and
+--   right argument of `Merge`. Produces a value of type Product left
 splitProductLeft :: Product (Merge l r) -> ProductType l -> ProductType r -> Product l
 splitProductLeft _ PTNil _ = Nil
 splitProductLeft xs _ PTNil = xs
@@ -177,7 +216,11 @@ splitProductLeft (Cons x xs) (PTCons l ls) (PTCons r rs) = Cons (splitSumLeft x 
 
 splitSumRight :: Sum (l ++ r) -> SumType l -> SumType r -> Sum r
 splitSumRight xs        STZero        _  = xs
-splitSumRight (Pick _)  (STSucc _ _)  _  = error "Value not in Right"
+splitSumRight (Pick _)  (STSucc _ _)  r  = undefSum r
+  where
+    undefSum :: SumType x -> Sum x
+    undefSum STZero = Undef
+    undefSum (STSucc _ xs) = Skip $ undefSum xs
 splitSumRight (Skip xs) (STSucc _ ls) rs = splitSumRight xs ls rs
 
 splitSumLeft :: Sum (l ++ r) -> SumType l -> SumType r -> Sum l
@@ -185,8 +228,8 @@ splitSumLeft (Pick x)  (STSucc _ _) _   = Pick x
 splitSumLeft _        STZero        _   = Undef -- or error?
 splitSumLeft (Skip xs) (STSucc _ ls) rs = Skip $ splitSumLeft xs ls rs
 
--- | UnConcat a Product, using a ProductType as the witness for the first
---   argument of ++. Produces a tuple with the first and second argument of ++
+-- | UnConcat a `Product`, using a `ProductType` as the witness for the first
+--   argument of `++`. Produces a tuple with the first and second argument of `++`
 unConcatP :: Product (x ++ y) -> ProductType x -> (Product x, Product y)
 unConcatP xs PTNil                  = (Nil, xs)
 unConcatP (Cons x xs) (PTCons _ ts) = (Cons x xs', ys')
