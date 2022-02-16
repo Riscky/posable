@@ -11,7 +11,7 @@
 --   as well as fixed size integers from Data.Int (Int8, Int16, Int32 and Int64)
 module Data.Type.POSable.Instances (POSable) where
 
-import           Data.Int                        (Int16, Int8, Int32, Int64)
+import           Data.Int                         (Int16, Int32, Int64, Int8)
 import           Data.Type.POSable.POSable
 import           Data.Type.POSable.Representation
 

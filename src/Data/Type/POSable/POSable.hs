@@ -15,19 +15,19 @@
 --   Also re-exports Generic.SOP, which is needed to derive POSable.
 module Data.Type.POSable.POSable (POSable(..), Generic) where
 
-import           Data.Finite                     (Finite, combineProduct,
-                                                  combineSum, separateProduct,
-                                                  separateSum)
+import           Data.Finite                      (Finite, combineProduct,
+                                                   combineSum, separateProduct,
+                                                   separateSum)
 import           Data.Type.POSable.Representation
-import           Generics.SOP                    hiding (Nil)
-import           Generics.SOP.NP                 hiding (Nil)
+import           Generics.SOP                     hiding (Nil)
+import           Generics.SOP.NP                  hiding (Nil)
 
-import           Data.Kind                       (Type)
+import           Data.Kind                        (Type)
 
-import qualified Generics.SOP                    as SOP
+import qualified Generics.SOP                     as SOP
 
-import           GHC.Base                        (Nat)
-import           GHC.TypeLits                    (KnownNat, type (*), type (+))
+import           GHC.Base                         (Nat)
+import           GHC.TypeLits                     (KnownNat, type (*), type (+))
 
 -- | POSable, the base of this library. Provide a compact memory representation
 --   for a type and a function to get back to the original type.
@@ -308,7 +308,7 @@ zipFromPOSable SOP.Nil SOP.Nil = SOP.Nil
 zipFromPOSable (FChoices c :* cs) (ProductFields f :* fs) = I (fromPOSable c f) :* zipFromPOSable cs fs
 
 foldMergeT2 :: NP ProductConcatFieldsT xss -> ProductType (FoldMerge (MapConcat (Map2Fields xss)))
-foldMergeT2 SOP.Nil                         = PTNil
+foldMergeT2 SOP.Nil                        = PTNil
 foldMergeT2 (ProductConcatFieldsT x :* xs) = zipSumT x (foldMergeT2 xs)
 
 unSums :: (All KnownNat (MapProducts (Map2Choices xs))) => Finite (Sums (MapProducts (Map2Choices xs))) -> NP ProductsMapChoices xs -> NS ProductsMapChoices xs

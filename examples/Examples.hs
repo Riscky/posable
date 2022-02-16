@@ -12,7 +12,7 @@ module Examples () where
 
 -- POSable re-exports SOP.Generic
 import           Data.Type.POSable.POSable as POSable
-import           GHC.Generics            as GHC
+import           GHC.Generics              as GHC
 
 data Test a b c = C1 a
                 | C2 b

@@ -9,12 +9,12 @@
 module Main where
 
 import           Data.Type.POSable.Instances      ()
-import           Data.Type.POSable.POSable         as POSable
+import           Data.Type.POSable.POSable        as POSable
 import           Data.Type.POSable.Representation
-import           GHC.Generics                    as GHC
-import           Test.Tasty                      (TestTree, defaultMain,
-                                                  testGroup)
-import           Test.Tasty.HUnit                (testCase, (@?=))
+import           GHC.Generics                     as GHC
+import           Test.Tasty                       (TestTree, defaultMain,
+                                                   testGroup)
+import           Test.Tasty.HUnit                 (testCase, (@?=))
 import           Test.Tasty.QuickCheck
 
 main :: IO ()
