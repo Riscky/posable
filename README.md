@@ -1,14 +1,24 @@
-# typeof
+# POSable
+
+A library to convert non-recursive Haskell-98 datatypes to a Product-of-Sums
+representation - and back. This makes it possible to compactly store arrays of
+sum types in a struct-of-arrays representation, which is used in array-based
+languages like [Accelerate].
+
+[Accelerate]: https://www.acceleratehs.org/
 
 ## Dependencies
 
 - The [Stack] package manager (Tested with stack 2.7.3)
-- stylish-haskell (for linting only)
+- `stylish-haskell` and `hlint` (for linting only)
+
+[Stack]: https://docs.haskellstack.org/en/stable/README/
 
 ## Tests and lints
 
 ``` bash
-stylish-haskell -r src/
+stylish-haskell -r src examples test
+hlint src examples test
 stack test
 ```
 
@@ -16,9 +26,9 @@ stack test
 
 ``` bash
 stack build
+# To build the docs
+stack haddock posable
 ```
-
-[Stack]: https://docs.haskellstack.org/en/stable/README/
 
 ## Examples
 
