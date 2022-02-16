@@ -2,8 +2,8 @@
 
 A library to convert non-recursive Haskell-98 datatypes to a Product-of-Sums
 representation - and back. This makes it possible to compactly store arrays of
-sum types in a struct-of-arrays representation, which is used in array-based
-languages like [Accelerate].
+(nested) sum types in a struct-of-arrays representation, which is used in
+array-based languages like [Accelerate].
 
 [Accelerate]: https://www.acceleratehs.org/
 
