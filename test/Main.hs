@@ -27,12 +27,13 @@ propInjectivity x = fromPOSable (choices x) (fields x) == x
 $(runQ $ do
   -- generate :: Int -> (Int -> a) -> [a]
   let generate n f = case n of
-                          0 -> []
-                          _ -> f n : generate (n - 1) f
+        0 -> []
+        _ -> f n : generate (n - 1) f
 
   let baseTypes = [''Int, ''Float, ''Char, ''Bool]
 
-  let buildValue n = (Bang NoSourceUnpackedness NoSourceStrictness, ConT (baseTypes !! (n-1)))
+  let buildValue n = ( Bang NoSourceUnpackedness NoSourceStrictness
+                     , ConT (baseTypes !! (n-1)))
 
   let buildCons name n = NormalC (mkName name) (generate n buildValue)
 
@@ -41,20 +42,36 @@ $(runQ $ do
         1 -> AppE (AppE (VarE '(<$>)) (ConE name)) (VarE 'arbitrary)
         _ -> AppE (AppE (VarE '(<*>)) (arbitraryCon name (n-1))) (VarE 'arbitrary)
 
-  let buildData name ncons nvals = DataD [] (mkName name) [] Nothing
+  let buildData name ncons nvals = DataD
+        []
+        (mkName name)
+        []
+        Nothing
         (generate ncons (\x -> buildCons (name ++ show x) nvals))
-          [
-              DerivClause Nothing [ConT ''Show, ConT ''Eq, ConT ''GHC.Generic, ConT ''POSable.Generic, ConT ''POSable]
-          ]
+        [
+          DerivClause
+            Nothing
+            [ ConT ''Show, ConT ''Eq, ConT ''GHC.Generic
+            , ConT ''POSable.Generic, ConT ''POSable
+            ]
+        ]
 
-  let buildInstance name ncons nvals = InstanceD Nothing [] (AppT (ConT ''Arbitrary) (ConT (mkName name)))
-        [FunD 'arbitrary [
-          Clause [] (NormalB (
-            AppE (VarE 'oneof) (ListE (generate ncons (\x ->
-              arbitraryCon (mkName (name ++ show x)) nvals
-            )))
-          )) []
-        ]]
+  let buildInstance name ncons nvals = InstanceD
+        Nothing
+        []
+        (AppT (ConT ''Arbitrary) (ConT (mkName name)))
+        [
+          FunD
+            'arbitrary
+            [
+              Clause
+                []
+                (NormalB ( AppE (VarE 'oneof) (ListE (generate ncons (\x ->
+                  arbitraryCon (mkName (name ++ show x)) nvals
+                )))))
+              []
+            ]
+        ]
 
   let buildDataAndInstance ncons m | nvals <- m-1, name <- "TEST" ++ show ncons ++ show nvals =
         [
@@ -62,11 +79,17 @@ $(runQ $ do
           buildInstance name ncons nvals
         ]
 
-  let buildTest ncons m | nvals <- m-1, name <- "TEST" ++ show ncons ++ show nvals = AppE (AppE (VarE 'testProperty) (LitE (StringL name))) (AppTypeE (VarE 'propInjectivity) (ConT (mkName name)))
+  let buildTest ncons m | nvals <- m-1, name <- "TEST" ++ show ncons ++ show nvals =
+        AppE
+          (AppE (VarE 'testProperty) (LitE (StringL name)))
+          (AppTypeE (VarE 'propInjectivity) (ConT (mkName name)))
 
   let tests ncons nvals = FunD (mkName "thtests") [Clause [] (NormalB (
-            AppE (AppE (VarE 'testGroup) (LitE (StringL "QuickCheck Template Haskell"))) (ListE
-              (concat (generate 4 (generate 5 . buildTest)))
+            AppE
+              (AppE
+                (VarE 'testGroup)
+                (LitE (StringL "QuickCheck Template Haskell")))
+              (ListE (concat (generate 4 (generate 5 . buildTest)))
             )
           )) []]
 
