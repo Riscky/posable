@@ -91,5 +91,6 @@ test-suite unit-test
     , tasty-hunit >= 0.10
     , tasty-quickcheck >= 0.10.2
     , ghc-typelits-knownnat >= 0.7.6
+    , template-haskell >= 2.16.0.0
   default-language:
       Haskell2010

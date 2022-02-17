@@ -2,7 +2,9 @@
 {-# LANGUAGE DeriveAnyClass   #-}
 {-# LANGUAGE DeriveGeneric    #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TemplateHaskell #-}
 
+{-# OPTIONS_GHC -ddump-splices #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_GHC -fconstraint-solver-iterations=8 #-}
 
@@ -11,11 +13,54 @@ module Main where
 import           Data.Type.POSable.Instances      ()
 import           Data.Type.POSable.POSable        as POSable
 import           Data.Type.POSable.Representation
-import           GHC.Generics                     as GHC
+import           GHC.Generics                     as GHC (Generic)
 import           Test.Tasty                       (TestTree, defaultMain,
                                                    testGroup)
 import           Test.Tasty.HUnit                 (testCase, (@?=))
 import           Test.Tasty.QuickCheck
+import Language.Haskell.TH
+import Language.Haskell.TH.Lib
+
+$(runQ $ do
+  -- generate :: Int -> (Int -> a) -> [a]
+  let generate n f = case n of
+                          0 -> []
+                          _ -> f n : generate (n - 1) f
+
+  let baseTypes = [''Int, ''Float, ''Char, ''Bool]
+
+  let buildValue n = (Bang NoSourceUnpackedness NoSourceStrictness, ConT (baseTypes !! (n-1)))
+
+  let buildCons name n = NormalC (mkName name) (generate n buildValue)
+
+  let arbitraryCon name n = case n of
+                              0 -> AppE (VarE 'pure) (ConE name)
+                              1 -> AppE (AppE (VarE '(<$>)) (ConE name)) (VarE 'arbitrary)
+                              _ -> AppE (AppE (VarE '(<*>)) (arbitraryCon name (n-1))) (VarE 'arbitrary)
+
+  let buildData name ncons nvals = DataD [] (mkName name) [] Nothing
+                                    (generate ncons (\x -> buildCons (name ++ show x) nvals))
+                                      [
+                                          DerivClause Nothing [ConT ''Show, ConT ''Eq, ConT ''GHC.Generic, ConT ''POSable.Generic, ConT ''POSable]
+                                      ]
+
+  let buildInstance name ncons nvals = InstanceD Nothing [] (AppT (ConT ''Arbitrary) (ConT (mkName name)))
+                                        [FunD 'arbitrary [
+                                          Clause [] (NormalB (
+                                            AppE (VarE 'oneof) (ListE (generate ncons (\x ->
+                                              arbitraryCon (mkName (name ++ show x)) nvals
+                                            )))
+                                          )) []
+                                        ]]
+
+  let buildDataAndInstance ncons m | nvals <- m-1, name <- "TEST" ++ show ncons ++ show nvals =
+                                                                                                          [
+                                                                                                            buildData name ncons nvals,
+                                                                                                            buildInstance name ncons nvals
+                                                                                                          ]
+
+  return (concat $ concat (generate 4 (generate 5 . buildDataAndInstance)))
+  )
 
 main :: IO ()
 main = defaultMain tests
