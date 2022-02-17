@@ -13,7 +13,7 @@
 
 -- | Exports the `POSable` class, which has a generic implementation `GPOSable`.
 --   Also re-exports Generic.SOP, which is needed to derive POSable.
-module Data.Type.POSable.POSable (POSable(..), Generic) where
+module Data.Type.POSable.POSable (POSable(..), Generic, Finite) where
 
 import           Data.Finite                      (Finite, combineProduct,
                                                    combineSum, separateProduct,
