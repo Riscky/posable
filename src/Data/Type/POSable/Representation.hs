@@ -219,7 +219,7 @@ splitSumRight xs        STZero        _  = xs
 splitSumRight (Pick _)  (STSucc _ _)  r  = undefSum r
   where
     undefSum :: SumType x -> Sum x
-    undefSum STZero = Undef
+    undefSum STZero        = Undef
     undefSum (STSucc _ xs) = Skip $ undefSum xs
 splitSumRight (Skip xs) (STSucc _ ls) rs = splitSumRight xs ls rs
 

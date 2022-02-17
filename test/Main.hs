@@ -1,8 +1,8 @@
 {-# LANGUAGE DataKinds        #-}
 {-# LANGUAGE DeriveAnyClass   #-}
 {-# LANGUAGE DeriveGeneric    #-}
+{-# LANGUAGE TemplateHaskell  #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 {-# OPTIONS_GHC -ddump-splices #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
@@ -14,12 +14,12 @@ import           Data.Type.POSable.Instances      ()
 import           Data.Type.POSable.POSable        as POSable
 import           Data.Type.POSable.Representation
 import           GHC.Generics                     as GHC (Generic)
+import           Language.Haskell.TH
+import           Language.Haskell.TH.Lib
 import           Test.Tasty                       (TestTree, defaultMain,
                                                    testGroup)
 import           Test.Tasty.HUnit                 (testCase, (@?=))
 import           Test.Tasty.QuickCheck
-import Language.Haskell.TH
-import Language.Haskell.TH.Lib
 
 $(runQ $ do
   -- generate :: Int -> (Int -> a) -> [a]
