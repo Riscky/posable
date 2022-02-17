@@ -21,6 +21,9 @@ import           Test.Tasty                       (TestTree, defaultMain,
 import           Test.Tasty.HUnit                 (testCase, (@?=))
 import           Test.Tasty.QuickCheck
 
+propInjectivity :: (POSable a, Arbitrary a, Eq a) => a -> Bool
+propInjectivity x = fromPOSable (choices x) (fields x) == x
+
 $(runQ $ do
   -- generate :: Int -> (Int -> a) -> [a]
   let generate n f = case n of
@@ -34,32 +37,40 @@ $(runQ $ do
   let buildCons name n = NormalC (mkName name) (generate n buildValue)
 
   let arbitraryCon name n = case n of
-                              0 -> AppE (VarE 'pure) (ConE name)
-                              1 -> AppE (AppE (VarE '(<$>)) (ConE name)) (VarE 'arbitrary)
-                              _ -> AppE (AppE (VarE '(<*>)) (arbitraryCon name (n-1))) (VarE 'arbitrary)
+        0 -> AppE (VarE 'pure) (ConE name)
+        1 -> AppE (AppE (VarE '(<$>)) (ConE name)) (VarE 'arbitrary)
+        _ -> AppE (AppE (VarE '(<*>)) (arbitraryCon name (n-1))) (VarE 'arbitrary)
 
   let buildData name ncons nvals = DataD [] (mkName name) [] Nothing
-                                    (generate ncons (\x -> buildCons (name ++ show x) nvals))
-                                      [
-                                          DerivClause Nothing [ConT ''Show, ConT ''Eq, ConT ''GHC.Generic, ConT ''POSable.Generic, ConT ''POSable]
-                                      ]
+        (generate ncons (\x -> buildCons (name ++ show x) nvals))
+          [
+              DerivClause Nothing [ConT ''Show, ConT ''Eq, ConT ''GHC.Generic, ConT ''POSable.Generic, ConT ''POSable]
+          ]
 
   let buildInstance name ncons nvals = InstanceD Nothing [] (AppT (ConT ''Arbitrary) (ConT (mkName name)))
-                                        [FunD 'arbitrary [
-                                          Clause [] (NormalB (
-                                            AppE (VarE 'oneof) (ListE (generate ncons (\x ->
-                                              arbitraryCon (mkName (name ++ show x)) nvals
-                                            )))
-                                          )) []
-                                        ]]
+        [FunD 'arbitrary [
+          Clause [] (NormalB (
+            AppE (VarE 'oneof) (ListE (generate ncons (\x ->
+              arbitraryCon (mkName (name ++ show x)) nvals
+            )))
+          )) []
+        ]]
 
   let buildDataAndInstance ncons m | nvals <- m-1, name <- "TEST" ++ show ncons ++ show nvals =
-                                                                                                          [
-                                                                                                            buildData name ncons nvals,
-                                                                                                            buildInstance name ncons nvals
-                                                                                                          ]
+        [
+          buildData name ncons nvals,
+          buildInstance name ncons nvals
+        ]
 
-  return (concat $ concat (generate 4 (generate 5 . buildDataAndInstance)))
+  let buildTest ncons m | nvals <- m-1, name <- "TEST" ++ show ncons ++ show nvals = AppE (AppE (VarE 'testProperty) (LitE (StringL name))) (AppTypeE (VarE 'propInjectivity) (ConT (mkName name)))
+
+  let tests ncons nvals = FunD (mkName "thtests") [Clause [] (NormalB (
+            AppE (AppE (VarE 'testGroup) (LitE (StringL "QuickCheck Template Haskell"))) (ListE
+              (concat (generate 4 (generate 5 . buildTest)))
+            )
+          )) []]
+
+  return (tests 4 5 : concat (concat (generate 4 (generate 5 . buildDataAndInstance))))
   )
 
 main :: IO ()
@@ -119,6 +130,7 @@ tests = testGroup "Test Choices and Fields of basic data types"
     , testProperty "Large product" $
         propInjectivity @LONGPRODUCT
     ]
+  , thtests
   ]
 
 data LONGSUM = A | B | C | D | E | F | G | H | I | J | K | L | M | N | O | P | Q | R | S | T | U | V | W | X | Y | Z
@@ -144,6 +156,3 @@ tupleOfEithers = (Left 1, Right 2.3)
 
 eitherOfTuples :: Either (Int, Float) (Float, Int)
 eitherOfTuples = Left (1,3.4)
-
-propInjectivity :: (POSable a, Arbitrary a, Eq a) => a -> Bool
-propInjectivity x = fromPOSable (choices x) (fields x) == x
