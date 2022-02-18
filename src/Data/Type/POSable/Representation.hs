@@ -1,6 +1,7 @@
 {-# LANGUAGE PolyKinds            #-}
 {-# LANGUAGE StandaloneDeriving   #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 -- | This module exports the `Product` and `Sum` type, and type- and valuelevel
 --   functions on these types.
@@ -16,6 +17,7 @@ module Data.Type.POSable.Representation
   , FoldMerge
   , MapConcat
   , Concat
+  , GroundType
   , zipSumT
   , zipSumLeft
   , zipSumRight
@@ -32,6 +34,11 @@ type family (++) (xs :: [k]) (ys :: [k]) :: [k] where
     (x ': xs) ++ ys = x ': xs ++ ys
 
 infixr 5 ++
+
+-----------------------------------------------------------------------
+-- Ground type class, can be filled constrained by the libraries user
+
+class GroundType a where
 
 -----------------------------------------------------------------------
 -- Heterogeneous lists with explicit types
@@ -68,14 +75,14 @@ concatP (Cons x xs) ys = Cons x (concatP xs ys)
 
 -- | Type witness for `Sum`
 data SumType :: [Type] -> Type where
-  STSucc :: x -> SumType xs -> SumType (x ': xs)
+  STSucc :: (GroundType x) => x -> SumType xs -> SumType (x ': xs)
   STZero :: SumType '[]
 
 -- | Typelevel sum, contains one value from the typelevel list of types, or
 --   undefined.
 data Sum :: [Type] -> Type where
-  Pick :: x -> Sum (x ': xs)
-  Skip :: Sum xs -> Sum (x ': xs)
+  Pick :: (GroundType x) => x -> Sum (x ': xs)
+  Skip :: (GroundType x) => Sum xs -> Sum (x ': xs)
   Undef :: Sum '[]
 
 deriving instance (All Eq xs) => Eq (Sum xs)
