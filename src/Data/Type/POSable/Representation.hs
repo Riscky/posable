@@ -1,7 +1,7 @@
-{-# LANGUAGE PolyKinds            #-}
-{-# LANGUAGE StandaloneDeriving   #-}
-{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PolyKinds             #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE UndecidableInstances  #-}
 
 -- | This module exports the `Product` and `Sum` type, and type- and valuelevel
 --   functions on these types.
