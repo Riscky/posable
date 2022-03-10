@@ -2,6 +2,8 @@
 {-# LANGUAGE PolyKinds             #-}
 {-# LANGUAGE StandaloneDeriving    #-}
 {-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE FlexibleContexts      #-}
 
 -- | This module exports the `Product` and `Sum` type, and type- and valuelevel
 --   functions on these types.
@@ -17,7 +19,7 @@ module Data.Type.POSable.Representation
   , FoldMerge
   , MapConcat
   , Concat
-  , GroundType
+  , GroundType(..)
   , zipSumT
   , zipSumLeft
   , zipSumRight
@@ -36,9 +38,10 @@ type family (++) (xs :: [k]) (ys :: [k]) :: [k] where
 infixr 5 ++
 
 -----------------------------------------------------------------------
--- Ground type class, can be filled constrained by the libraries user
+-- Ground type class, can be filled by the library's user
 
 class GroundType a where
+  type TypeRep a :: Type
 
 -----------------------------------------------------------------------
 -- Heterogeneous lists with explicit types
@@ -48,9 +51,9 @@ data ProductType :: [[Type]] -> Type where
   PTNil :: ProductType '[]
   PTCons :: SumType x -> ProductType xs -> ProductType (x ': xs)
 
-instance (All2 Show xs) => Show (ProductType xs) where
-  show PTNil         = "PTNil"
-  show (PTCons a as) = "PTCons " ++ show a ++ " (" ++ show as ++ ")"
+-- instance (All2 Show xs) => Show (ProductType xs) where
+--   show PTNil         = "PTNil"
+--   show (PTCons a as) = "PTCons " ++ show a ++ " (" ++ show as ++ ")"
 
 -- | Concatenates `ProductType` values
 concatPT :: ProductType x -> ProductType y -> ProductType (x ++ y)
@@ -75,7 +78,7 @@ concatP (Cons x xs) ys = Cons x (concatP xs ys)
 
 -- | Type witness for `Sum`
 data SumType :: [Type] -> Type where
-  STSucc :: (GroundType x) => x -> SumType xs -> SumType (x ': xs)
+  STSucc :: (GroundType x) => TypeRep x -> SumType xs -> SumType (x ': xs)
   STZero :: SumType '[]
 
 -- | Typelevel sum, contains one value from the typelevel list of types, or
@@ -87,7 +90,11 @@ data Sum :: [Type] -> Type where
 
 deriving instance (All Eq xs) => Eq (Sum xs)
 
-instance (All Show x) => Show (SumType x) where
+type family MapTypeRep (xsss :: f x) :: f y where
+  MapTypeRep '[] = '[]
+  MapTypeRep (x ': xs) = TypeRep x ': MapTypeRep xs
+
+instance (All Show (MapTypeRep x)) => Show (SumType x) where
   show (STSucc x xs) = "STSucc " ++ show x ++ " (" ++ show xs ++ ")"
   show STZero        = "STZero"
 

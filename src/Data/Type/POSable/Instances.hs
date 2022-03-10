@@ -30,6 +30,3 @@ deriving instance (POSable a, POSable b, POSable c, POSable d, POSable e) => POS
 deriving instance (POSable a, POSable b, POSable c, POSable d, POSable e, POSable f) => POSable (a,b,c,d,e,f)
 deriving instance (POSable a, POSable b, POSable c, POSable d, POSable e, POSable f, POSable g) => POSable (a,b,c,d,e,f,g)
 deriving instance (POSable a, POSable b, POSable c, POSable d, POSable e, POSable f, POSable g, POSable h) => POSable (a,b,c,d,e,f,g,h)
-
------------------------------------------------------------------------
--- Instances of POSable for machine types
