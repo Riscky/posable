@@ -4,6 +4,7 @@
 {-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE AllowAmbiguousTypes   #-}
 
 -- | This module exports the `Product` and `Sum` type, and type- and valuelevel
 --   functions on these types.
@@ -42,6 +43,8 @@ infixr 5 ++
 
 class GroundType a where
   type TypeRep a :: Type
+
+  mkTypeRep :: TypeRep a
 
 -----------------------------------------------------------------------
 -- Heterogeneous lists with explicit types

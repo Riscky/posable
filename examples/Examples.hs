@@ -2,10 +2,13 @@
 {-# LANGUAGE DeriveAnyClass #-}
 -- Needed to derive GHC.Generic
 {-# LANGUAGE DeriveGeneric  #-}
+-- To generate instances for ground types
+{-# LANGUAGE TemplateHaskell #-}
 -- Needed to determine the tag size at compile time
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 -- Larger types need more iterations
 {-# OPTIONS_GHC -fconstraint-solver-iterations=11 #-}
+{-# OPTIONS_GHC -ddump-splices #-}
 
 -- | Contains an example for deriving POSable for some datatype
 module Examples () where
@@ -13,6 +16,7 @@ module Examples () where
 -- POSable re-exports SOP.Generic
 import           Data.Type.POSable.POSable as POSable
 import           Data.Type.POSable.Representation
+import           Data.Type.POSable.TH
 import           GHC.Generics              as GHC
 
 data Test a b c = C1 a
@@ -27,30 +31,15 @@ data Test a b c = C1 a
 instance GroundType Float where
   type TypeRep Float = Float
 
+  mkTypeRep = 0
+
 instance GroundType Double where
   type TypeRep Double = Double
 
+  mkTypeRep = 0
+
+
 -- Define a POSable instance for these ground types
-instance POSable Float where
-  type Choices Float = 1
-  choices _ = 0
+mkPOSableGroundType ''Float
 
-  type Fields Float = '[ '[Float]]
-  fields x = Cons (Pick x) Nil
-
-  fromPOSable 0 (Cons (Pick x) Nil) = x
-  fromPOSable _ _                   = error "index out of range"
-
-  emptyFields = PTCons (STSucc 0 STZero) PTNil
-
-instance POSable Double where
-  type Choices Double = 1
-  choices _ = 0
-
-  type Fields Double = '[ '[Double]]
-  fields x = Cons (Pick x) Nil
-
-  fromPOSable 0 (Cons (Pick x) Nil) = x
-  fromPOSable _ _                   = error "index out of range"
-
-  emptyFields = PTCons (STSucc 0 STZero) PTNil
+mkPOSableGroundType ''Double

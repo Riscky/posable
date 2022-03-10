@@ -50,6 +50,7 @@ library
   exposed-modules:       Data.Type.POSable.POSable
                        , Data.Type.POSable.Instances
                        , Data.Type.POSable.Representation
+                       , Data.Type.POSable.TH
 
   other-modules:         Examples
 
@@ -61,6 +62,7 @@ library
                      , generics-sop >= 0.5.1.1
                      , finite-typelits == 0.1.4.2
                      , ghc-typelits-knownnat >= 0.7.6
+                     , template-haskell >= 2.16.0.0
 
   -- Directories containing source files.
   hs-source-dirs:      src

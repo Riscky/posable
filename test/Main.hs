@@ -14,6 +14,7 @@ module Main where
 import           Data.Type.POSable.Instances      ()
 import           Data.Type.POSable.POSable        as POSable
 import           Data.Type.POSable.Representation
+import           Data.Type.POSable.TH
 import           GHC.Generics                     as GHC (Generic)
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Lib
@@ -28,77 +29,37 @@ propInjectivity x = fromPOSable (choices x) (fields x) == x
 instance GroundType Float where
   type TypeRep Float = Float
 
+  mkTypeRep = 0
+
 instance GroundType Double where
   type TypeRep Double = Double
 
+  mkTypeRep = 0
+
 instance GroundType Char where
   type TypeRep Char = Char
+
+  mkTypeRep = '0'
   
 instance GroundType Int where
   type TypeRep Int = Int
 
+  mkTypeRep = 0
+
 instance GroundType Word where
   type TypeRep Word = Word
+
+  mkTypeRep = 0
   
-instance POSable Float where
-  type Choices Float = 1
-  choices _ = 0
-
-  type Fields Float = '[ '[Float]]
-  fields x = Cons (Pick x) Nil
-
-  fromPOSable 0 (Cons (Pick x) Nil) = x
-  fromPOSable _ _                   = error "index out of range"
-
-  emptyFields = PTCons (STSucc 0 STZero) PTNil
+mkPOSableGroundType ''Float
   
-instance POSable Double where
-  type Choices Double = 1
-  choices _ = 0
+mkPOSableGroundType ''Double
 
-  type Fields Double = '[ '[Double]]
-  fields x = Cons (Pick x) Nil
+mkPOSableGroundType ''Char
 
-  fromPOSable 0 (Cons (Pick x) Nil) = x
-  fromPOSable _ _                   = error "index out of range"
+mkPOSableGroundType ''Int
 
-  emptyFields = PTCons (STSucc 0 STZero) PTNil
-
-instance POSable Int where
-  type Choices Int = 1
-  choices _ = 0
-
-  type Fields Int = '[ '[Int]]
-  fields x = Cons (Pick x) Nil
-
-  fromPOSable 0 (Cons (Pick x) Nil) = x
-  fromPOSable _ _                   = error "index out of range"
-
-  emptyFields = PTCons (STSucc 0 STZero) PTNil
-
-instance POSable Char where
-  type Choices Char = 1
-  choices _ = 0
-
-  type Fields Char = '[ '[Char]]
-  fields x = Cons (Pick x) Nil
-
-  fromPOSable 0 (Cons (Pick x) Nil) = x
-  fromPOSable _ _                   = error "index out of range"
-
-  emptyFields = PTCons (STSucc '\t' STZero) PTNil
-
-instance POSable Word where
-  type Choices Word = 1
-  choices _ = 0
-
-  type Fields Word = '[ '[Word]]
-  fields x = Cons (Pick x) Nil
-
-  fromPOSable 0 (Cons (Pick x) Nil) = x
-  fromPOSable _ _                   = error "index out of range"
-
-  emptyFields = PTCons (STSucc 0 STZero) PTNil
+mkPOSableGroundType ''Word
 
 $(runQ $ do
   -- generate :: Int -> (Int -> a) -> [a]
