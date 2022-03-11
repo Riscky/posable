@@ -27,7 +27,7 @@ jobs:
       run: "tar xzf stylish-haskell.tar.gz"
 
     - name: "add stylish-haskell to PATH"
-      run: "echo 'stylish-haskell-v0.13.0.0-linux-x86_64/stylish-haskell' >> $GITHUB_PATH"
+      run: "echo 'stylish-haskell-v0.13.0.0-linux-x86_64' >> $GITHUB_PATH"
 
     - name: "Run stylish-haskell"
       run: "./stylish-haskell.sh"
