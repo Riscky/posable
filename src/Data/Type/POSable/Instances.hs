@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveAnyClass       #-}
 {-# LANGUAGE StandaloneDeriving   #-}
-{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
@@ -12,10 +12,8 @@
 --   as well as fixed size integers from Data.Int (`Int8`, `Int16`, `Int32` and `Int64`)
 module Data.Type.POSable.Instances (POSable) where
 
-import           Data.Int                         (Int16, Int32, Int64, Int8)
 import           Data.Type.POSable.POSable
-import           Data.Type.POSable.Representation
-import Language.Haskell.TH
+import           Language.Haskell.TH
 
 -----------------------------------------------------------------------
 -- Instances for common nonrecursive Haskell datatypes

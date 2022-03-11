@@ -6,9 +6,9 @@
 
 module Data.Type.POSable.TH (mkPOSableGroundType) where
 
-import Data.Type.POSable.Representation
-import Data.Type.POSable.POSable
-import Language.Haskell.TH
+import           Data.Type.POSable.POSable
+import           Data.Type.POSable.Representation
+import           Language.Haskell.TH
 
 mkPOSableGroundType :: Name -> DecsQ
 mkPOSableGroundType name = do
@@ -19,13 +19,13 @@ mkDec name =
   [d| instance POSable $name where
         type Choices $name = 1
         choices _ = 0
-      
+
         type Fields $name = '[ '[$name]]
         fields x = Cons (Pick x) Nil
-      
+
         fromPOSable 0 (Cons (Pick x) Nil) = x
         fromPOSable _ _                   = error "index out of range"
-      
+
         emptyFields = PTCons (STSucc (mkTypeRep @( $name)) STZero) PTNil
   |]
 -- do

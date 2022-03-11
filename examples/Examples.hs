@@ -1,7 +1,7 @@
 -- Needed to derive POSable
-{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveAnyClass  #-}
 -- Needed to derive GHC.Generic
-{-# LANGUAGE DeriveGeneric  #-}
+{-# LANGUAGE DeriveGeneric   #-}
 -- To generate instances for ground types
 {-# LANGUAGE TemplateHaskell #-}
 -- Needed to determine the tag size at compile time
@@ -14,10 +14,10 @@
 module Examples () where
 
 -- POSable re-exports SOP.Generic
-import           Data.Type.POSable.POSable as POSable
+import           Data.Type.POSable.POSable        as POSable
 import           Data.Type.POSable.Representation
 import           Data.Type.POSable.TH
-import           GHC.Generics              as GHC
+import           GHC.Generics                     as GHC
 
 data Test a b c = C1 a
                 | C2 b

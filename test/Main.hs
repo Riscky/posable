@@ -40,7 +40,7 @@ instance GroundType Char where
   type TypeRep Char = Char
 
   mkTypeRep = '0'
-  
+
 instance GroundType Int where
   type TypeRep Int = Int
 
@@ -50,9 +50,9 @@ instance GroundType Word where
   type TypeRep Word = Word
 
   mkTypeRep = 0
-  
+
 mkPOSableGroundType ''Float
-  
+
 mkPOSableGroundType ''Double
 
 mkPOSableGroundType ''Char
