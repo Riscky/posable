@@ -199,9 +199,11 @@ appends SOP.Nil   = Nil
 appends (x :* xs) = concatP x (appends xs)
 
 foldMerge :: NP ProductType xss -> NS Product xss -> Product (FoldMerge xss)
+foldMerge (_ :* SOP.Nil) (Z y) = y
+foldMerge (_ :* SOP.Nil) (S _) = error "Reached an inaccessible pattern"
 foldMerge SOP.Nil   _      = Nil
-foldMerge (_ :* xs) (Z y)  = zipSumLeft y (foldMergeT xs)
-foldMerge (x :* xs) (S ys) = zipSumRight x (foldMerge xs ys)
+foldMerge (_ :* x' :* xs) (Z y)  = zipSumLeft y (foldMergeT (x' :* xs))
+foldMerge (x :* x' :* xs) (S ys) = zipSumRight x (foldMerge (x' :* xs) ys)
 
 appendsT :: NP ProductType xs -> ProductType (Concat xs)
 appendsT SOP.Nil   = PTNil
@@ -212,8 +214,9 @@ mapConcatT SOP.Nil   = SOP.Nil
 mapConcatT (x :* xs) = appendsT x :* mapConcatT xs
 
 foldMergeT :: NP ProductType xss -> ProductType (FoldMerge xss)
-foldMergeT SOP.Nil   = PTNil
-foldMergeT (x :* xs) = zipSumT x (foldMergeT xs)
+foldMergeT (x :* SOP.Nil)  = x
+foldMergeT SOP.Nil         = PTNil
+foldMergeT (x :* x' :* xs) = zipSumT x (foldMergeT (x' :* xs))
 
 --------------------------------------------------------------------------------
 -- Functions that deal with creating Products from types
@@ -308,8 +311,9 @@ zipFromPOSable SOP.Nil SOP.Nil = SOP.Nil
 zipFromPOSable (FChoices c :* cs) (ProductFields f :* fs) = I (fromPOSable c f) :* zipFromPOSable cs fs
 
 foldMergeT2 :: NP ProductConcatFieldsT xss -> ProductType (FoldMerge (MapConcat (Map2Fields xss)))
-foldMergeT2 SOP.Nil                        = PTNil
-foldMergeT2 (ProductConcatFieldsT x :* xs) = zipSumT x (foldMergeT2 xs)
+foldMergeT2 (ProductConcatFieldsT x :* SOP.Nil)  = x
+foldMergeT2 SOP.Nil                              = PTNil
+foldMergeT2 (ProductConcatFieldsT x :* x' :* xs) = zipSumT x (foldMergeT2 (x' :* xs))
 
 unSums :: (All KnownNat (MapProducts (Map2Choices xs))) => Finite (Sums (MapProducts (Map2Choices xs))) -> NP ProductsMapChoices xs -> NS ProductsMapChoices xs
 unSums _ SOP.Nil = error "Cannot construct empty sum"
@@ -318,10 +322,14 @@ unSums x (_ :* ys) = case separateSum x of
   Right x' -> S (unSums x' ys)
 
 mapFromPOSable :: forall xss . (All2 KnownNat (Map2Choices xss), All2 POSable xss) => NS ProductsMapChoices xss -> Product (FoldMerge (MapConcat (Map2Fields xss))) -> NP ProductConcatFieldsT xss -> NS (NP I) xss
-mapFromPOSable (Z cs) fs fts = Z (zipFromPOSable cs' ( unConcat (unMergeLeft fs fts) pureFields))
+mapFromPOSable (Z cs) fs fts@(_ :* _ :* _) = Z (zipFromPOSable cs' ( unConcat (unMergeLeft fs fts) pureFields))
   where
     cs' = separateProducts cs pureChoices
-mapFromPOSable (S cs) fs fts = S (mapFromPOSable cs (unMergeRight fs fts) (tl fts))
+mapFromPOSable (S cs) fs fts@(_ :* _ :* _) = S (mapFromPOSable cs (unMergeRight fs fts) (tl fts))
+mapFromPOSable (Z cs) fs fts@(_ :* SOP.Nil) = Z (zipFromPOSable cs' ( unConcat fs pureFields))
+  where
+    cs' = separateProducts cs pureChoices
+mapFromPOSable (S cs) fs fts@(_ :* SOP.Nil) = S (mapFromPOSable cs Nil (tl fts)) -- TODO check what this migth mean
 
 unConcat :: Product (Concat (MapFields xs)) -> NP ProductFieldsT xs -> NP ProductFields xs
 unConcat Nil SOP.Nil     = SOP.Nil

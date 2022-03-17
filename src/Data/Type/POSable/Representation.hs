@@ -1,5 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes   #-}
 {-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE ExplicitNamespaces    #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds             #-}
@@ -27,6 +28,7 @@ module Data.Type.POSable.Representation
   , splitProductLeft
   , splitProductRight
   , unConcatP
+  , Undef(..)
 ) where
 import           Data.Kind
 import           Generics.SOP (All, All2)
@@ -89,7 +91,16 @@ data SumType :: [Type] -> Type where
 data Sum :: [Type] -> Type where
   Pick :: (GroundType x) => x -> Sum (x ': xs)
   Skip :: (GroundType x) => Sum xs -> Sum (x ': xs)
-  Undef :: Sum '[]
+
+data Undef = Undef
+  deriving (Eq, Show)
+
+-- Undef is the only default GroundType, because we need to mark when no value
+-- is when 2 non-equal-lenght types are zipped
+instance GroundType Undef where
+  type TypeRep Undef = Undef
+
+  mkTypeRep = Undef
 
 deriving instance (All Eq xs) => Eq (Sum xs)
 
@@ -104,7 +115,6 @@ instance (All Show (MapTypeRep x)) => Show (SumType x) where
 instance (All Show x) => Show (Sum x) where
   show (Pick x) = "Pick " ++ show x
   show (Skip x) = "Skip " ++ show x
-  show Undef    = "Undef"
 
 -- only used in examples
 data A
@@ -157,8 +167,9 @@ type family MapConcat (xsss :: f (g (h x))) :: f (h x) where
 -- = '[ '[A, B, C, F, G], '[D, E]]
 --
 type family Merge (xs :: f (g x)) (ys :: g (f x)) :: g (f x) where
-  Merge '[] bs = bs
-  Merge as '[] = as
+  Merge '[] '[] = '[]
+  Merge '[] (b ': bs) = (Undef ': b) ': Merge '[] bs
+  Merge (a ': as) '[] = (a ++ '[Undef]) ': Merge as '[]
   Merge (a ': as) (b ': bs) = (a ++ b) ': Merge as bs
 
 -- | Fold `Merge` over a list (of lists, of lists)
@@ -170,8 +181,9 @@ type family Merge (xs :: f (g x)) (ys :: g (f x)) :: g (f x) where
 -- = '[ '[A, B, C, F, G, H], '[D, E]]
 --
 type family FoldMerge (xss :: f (g x)) :: g x where
-  FoldMerge '[] = '[]
+  FoldMerge '[a] = a
   FoldMerge (a ': as) = Merge a (FoldMerge as)
+  FoldMerge '[] = '[]
 
 ----------------------------------------
 -- Functions on Products and Sums
@@ -180,29 +192,45 @@ type family FoldMerge (xss :: f (g x)) :: g x where
 --   the right argument of `Merge`
 zipSumRight :: ProductType l -> Product r -> Product (Merge l r)
 zipSumRight (PTCons x xs) (Cons y ys) = Cons (takeRight x y) (zipSumRight xs ys)
-zipSumRight PTNil ys                  = ys
-zipSumRight xs Nil                    = makeUndefProduct xs
+zipSumRight PTNil         (Cons y ys) = Cons (takeRightUndef y) (zipSumRight PTNil ys)
+zipSumRight (PTCons x xs) Nil         = Cons (makeUndefRight x) (zipSumRight xs Nil)
+zipSumRight PTNil         Nil         = Nil
 
-makeUndefProduct :: ProductType x -> Product x
-makeUndefProduct (PTCons y ys) = Cons (makeEmpty y) (makeUndefProduct ys)
-makeUndefProduct PTNil         = Nil
+makeUndefRight :: SumType x -> Sum (x ++ '[Undef])
+makeUndefRight (STSucc _ xs) = Skip (makeUndefRight xs)
+makeUndefRight STZero        = Pick Undef
+
+makeUndefLeft :: SumType x -> Sum (Undef ': x)
+makeUndefLeft _ = Pick Undef
+
+takeRightUndef :: Sum r -> Sum (Undef ': r)
+takeRightUndef _ = Pick Undef
+
+takeLeftUndef :: Sum x -> Sum (x ++ '[Undef])
+takeLeftUndef (Pick x)  = Pick x
+takeLeftUndef (Skip xs) = Skip (takeLeftUndef xs)
 
 -- | Merge a `ProductType` and a `Product`, putting the values of the `Product`
 --   in the left argument of `Merge`
 zipSumLeft :: Product l -> ProductType r -> Product (Merge l r)
 zipSumLeft (Cons x xs) (PTCons y ys) = Cons (takeLeft x y) (zipSumLeft xs ys)
-zipSumLeft Nil         (PTCons y ys) = Cons (makeEmpty y) (zipSumLeft Nil ys)
-zipSumLeft xs          PTNil         = xs
-
-makeEmpty :: SumType xs -> Sum xs
-makeEmpty (STSucc _ xs) = Skip (makeEmpty xs)
-makeEmpty STZero        = Undef
+zipSumLeft Nil         (PTCons y ys) = Cons (makeUndefLeft y) (zipSumLeft Nil ys)
+zipSumLeft (Cons x xs) PTNil         = Cons (takeLeftUndef x) (zipSumLeft xs PTNil)
+zipSumLeft Nil         PTNil         = Nil
 
 -- | Merge two `ProductType`s
 zipSumT :: ProductType l -> ProductType r -> ProductType (Merge l r)
 zipSumT (PTCons x xs) (PTCons y ys) = PTCons (takeST x y) (zipSumT xs ys)
-zipSumT PTNil ys                    = ys
-zipSumT xs PTNil                    = xs
+zipSumT PTNil (PTCons y ys)         = PTCons (makeUndefLeftT y) (zipSumT PTNil ys)
+zipSumT (PTCons x xs) PTNil         = PTCons (makeUndefRightT x) (zipSumT xs PTNil)
+zipSumT PTNil PTNil                 = PTNil
+
+makeUndefRightT :: SumType x -> SumType (x ++ '[Undef])
+makeUndefRightT (STSucc x xs) = STSucc x (makeUndefRightT xs)
+makeUndefRightT STZero        = STSucc Undef STZero
+
+makeUndefLeftT :: SumType x -> SumType (Undef ': x)
+makeUndefLeftT = STSucc Undef
 
 takeST :: SumType l -> SumType r -> SumType (l ++ r)
 takeST (STSucc l ls) rs = STSucc l (takeST ls rs)
@@ -211,7 +239,6 @@ takeST STZero        rs = rs
 takeLeft :: Sum l -> SumType r -> Sum (l ++ r)
 takeLeft (Pick l)  _  = Pick l
 takeLeft (Skip ls) rs = Skip (takeLeft ls rs)
-takeLeft Undef     rs = makeEmpty rs
 
 takeRight :: SumType l -> Sum r -> Sum (l ++ r)
 takeRight (STSucc _ ls) rs = Skip (takeRight ls rs)
@@ -220,29 +247,34 @@ takeRight STZero        rs = rs
 -- | UnMerge a `Product`, using two `ProductType`s as witnesses for the left and
 --   right argument of `Merge`. Produces a value of type Product right
 splitProductRight :: Product (Merge l r) -> ProductType l -> ProductType r -> Product r
-splitProductRight xs PTNil _ = xs
+splitProductRight (Cons x xs) PTNil (PTCons _ rs) = Cons (removeUndefLeft x) (splitProductRight xs PTNil rs)
 splitProductRight _  _ PTNil = Nil
 splitProductRight (Cons x xs) (PTCons l ls) (PTCons r rs) = Cons (splitSumRight x l r) (splitProductRight xs ls rs)
+
+removeUndefLeft :: Sum (Undef ': x) -> Sum x
+removeUndefLeft (Pick Undef) = error "Undefined value where I expected an actual value"
+removeUndefLeft (Skip xs)    = xs
+
+removeUndefRight :: SumType x -> Sum (x ++ '[Undef]) -> Sum x
+removeUndefRight STZero        _            = error "Undefined value where I expected an actual value"
+removeUndefRight (STSucc _ _)  (Pick y)     = Pick y
+removeUndefRight (STSucc _ xs) (Skip ys) = Skip (removeUndefRight xs ys)
 
 -- | UnMerge a `Product`, using two `ProductType`s as witnesses for the left and
 --   right argument of `Merge`. Produces a value of type Product left
 splitProductLeft :: Product (Merge l r) -> ProductType l -> ProductType r -> Product l
 splitProductLeft _ PTNil _ = Nil
-splitProductLeft xs _ PTNil = xs
+splitProductLeft (Cons x xs) (PTCons l ls) PTNil = Cons (removeUndefRight l x) (splitProductLeft xs ls PTNil)
 splitProductLeft (Cons x xs) (PTCons l ls) (PTCons r rs) = Cons (splitSumLeft x l r) (splitProductLeft xs ls rs)
 
 splitSumRight :: Sum (l ++ r) -> SumType l -> SumType r -> Sum r
 splitSumRight xs        STZero        _  = xs
-splitSumRight (Pick _)  (STSucc _ _)  r  = undefSum r
-  where
-    undefSum :: SumType x -> Sum x
-    undefSum STZero        = Undef
-    undefSum (STSucc _ xs) = Skip $ undefSum xs
+splitSumRight (Pick _)  (STSucc _ _)  _  = error "No value found in right side of Sum"
 splitSumRight (Skip xs) (STSucc _ ls) rs = splitSumRight xs ls rs
 
 splitSumLeft :: Sum (l ++ r) -> SumType l -> SumType r -> Sum l
 splitSumLeft (Pick x)  (STSucc _ _) _   = Pick x
-splitSumLeft _        STZero        _   = Undef -- or error?
+splitSumLeft _        STZero        _   = error "No value value found in left side of Sum"
 splitSumLeft (Skip xs) (STSucc _ ls) rs = Skip $ splitSumLeft xs ls rs
 
 -- | UnConcat a `Product`, using a `ProductType` as the witness for the first

@@ -11,8 +11,7 @@ import           Data.Type.POSable.Representation
 import           Language.Haskell.TH
 
 mkPOSableGroundType :: Name -> DecsQ
-mkPOSableGroundType name = do
-  mkDec (pure (ConT name))
+mkPOSableGroundType name = mkDec (pure (ConT name))
 
 mkDec :: Q Type -> DecsQ
 mkDec name =
@@ -26,7 +25,7 @@ mkDec name =
         fromPOSable 0 (Cons (Pick x) Nil) = x
         fromPOSable _ _                   = error "index out of range"
 
-        emptyFields = PTCons (STSucc (mkTypeRep @( $name)) STZero) PTNil
+        emptyFields = PTCons (STSucc (mkTypeRep @($name)) STZero) PTNil
   |]
 -- do
 

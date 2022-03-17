@@ -146,7 +146,7 @@ tests = testGroup "Test Choices and Fields of basic data types"
     , testCase "Nested" $
         choices nestedMaybe @?= 2
     , testCase "Fields" $
-        fields nestedMaybe @?= Cons (Pick 1.4) Nil
+        fields nestedMaybe @?= Cons (Skip (Skip (Pick 1.4))) Nil
     ]
   , testGroup "Either"
     [ testCase "Left" $
