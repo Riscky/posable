@@ -321,15 +321,22 @@ unSums x (_ :* ys) = case separateSum x of
   Left x'  -> Z (ProductsMapChoices x')
   Right x' -> S (unSums x' ys)
 
-mapFromPOSable :: forall xss . (All2 KnownNat (Map2Choices xss), All2 POSable xss) => NS ProductsMapChoices xss -> Product (FoldMerge (MapConcat (Map2Fields xss))) -> NP ProductConcatFieldsT xss -> NS (NP I) xss
+mapFromPOSable
+  :: forall xss .
+  ( All2 KnownNat (Map2Choices xss)
+  , All2 POSable xss
+  ) => NS ProductsMapChoices xss
+  -> Product (FoldMerge (MapConcat (Map2Fields xss)))
+  -> NP ProductConcatFieldsT xss
+  -> NS (NP I) xss
 mapFromPOSable (Z cs) fs fts@(_ :* _ :* _) = Z (zipFromPOSable cs' ( unConcat (unMergeLeft fs fts) pureFields))
   where
     cs' = separateProducts cs pureChoices
 mapFromPOSable (S cs) fs fts@(_ :* _ :* _) = S (mapFromPOSable cs (unMergeRight fs fts) (tl fts))
-mapFromPOSable (Z cs) fs fts@(_ :* SOP.Nil) = Z (zipFromPOSable cs' ( unConcat fs pureFields))
+mapFromPOSable (Z cs) fs (_ :* SOP.Nil) = Z (zipFromPOSable cs' (unConcat fs pureFields))
   where
     cs' = separateProducts cs pureChoices
-mapFromPOSable (S cs) fs fts@(_ :* SOP.Nil) = S (mapFromPOSable cs Nil (tl fts)) -- TODO check what this migth mean
+mapFromPOSable (S cs) _ fts@(_ :* SOP.Nil) = S (mapFromPOSable cs Nil (tl fts))
 
 unConcat :: Product (Concat (MapFields xs)) -> NP ProductFieldsT xs -> NP ProductFields xs
 unConcat Nil SOP.Nil     = SOP.Nil
