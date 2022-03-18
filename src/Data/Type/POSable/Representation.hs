@@ -56,9 +56,9 @@ data ProductType :: [[Type]] -> Type where
   PTNil :: ProductType '[]
   PTCons :: SumType x -> ProductType xs -> ProductType (x ': xs)
 
--- instance (All2 Show xs) => Show (ProductType xs) where
---   show PTNil         = "PTNil"
---   show (PTCons a as) = "PTCons " ++ show a ++ " (" ++ show as ++ ")"
+instance (All2 Show xs) => Show (ProductType xs) where
+  show PTNil         = "PTNil"
+  show (PTCons a as) = "PTCons" ++ show a ++ " (" ++ show as ++ ")"
 
 -- | Concatenates `ProductType` values
 concatPT :: ProductType x -> ProductType y -> ProductType (x ++ y)
@@ -108,8 +108,8 @@ type family MapTypeRep (xsss :: f x) :: f y where
   MapTypeRep '[] = '[]
   MapTypeRep (x ': xs) = TypeRep x ': MapTypeRep xs
 
-instance (All Show (MapTypeRep x)) => Show (SumType x) where
-  show (STSucc x xs) = "STSucc " ++ show x ++ " (" ++ show xs ++ ")"
+instance Show (SumType x) where
+  show (STSucc x xs) = "STSucc someval (" ++ show xs ++ ")"
   show STZero        = "STZero"
 
 instance (All Show x) => Show (Sum x) where
@@ -191,10 +191,10 @@ type family FoldMerge (xss :: f (g x)) :: g x where
 -- | Merge a `ProductType` and a `Product`, putting the values of the `Product` in
 --   the right argument of `Merge`
 zipSumRight :: ProductType l -> Product r -> Product (Merge l r)
-zipSumRight (PTCons x xs) (Cons y ys) = Cons (takeRight x y) (zipSumRight xs ys)
+zipSumRight PTNil         Nil         = Nil
 zipSumRight PTNil         (Cons y ys) = Cons (takeRightUndef y) (zipSumRight PTNil ys)
 zipSumRight (PTCons x xs) Nil         = Cons (makeUndefRight x) (zipSumRight xs Nil)
-zipSumRight PTNil         Nil         = Nil
+zipSumRight (PTCons x xs) (Cons y ys) = Cons (takeRight x y) (zipSumRight xs ys)
 
 makeUndefRight :: SumType x -> Sum (x ++ '[Undef])
 makeUndefRight (STSucc _ xs) = Skip (makeUndefRight xs)
@@ -204,7 +204,7 @@ makeUndefLeft :: SumType x -> Sum (Undef ': x)
 makeUndefLeft _ = Pick Undef
 
 takeRightUndef :: Sum r -> Sum (Undef ': r)
-takeRightUndef _ = Pick Undef
+takeRightUndef = Skip
 
 takeLeftUndef :: Sum x -> Sum (x ++ '[Undef])
 takeLeftUndef (Pick x)  = Pick x
@@ -213,17 +213,17 @@ takeLeftUndef (Skip xs) = Skip (takeLeftUndef xs)
 -- | Merge a `ProductType` and a `Product`, putting the values of the `Product`
 --   in the left argument of `Merge`
 zipSumLeft :: Product l -> ProductType r -> Product (Merge l r)
-zipSumLeft (Cons x xs) (PTCons y ys) = Cons (takeLeft x y) (zipSumLeft xs ys)
+zipSumLeft Nil         PTNil         = Nil
 zipSumLeft Nil         (PTCons y ys) = Cons (makeUndefLeft y) (zipSumLeft Nil ys)
 zipSumLeft (Cons x xs) PTNil         = Cons (takeLeftUndef x) (zipSumLeft xs PTNil)
-zipSumLeft Nil         PTNil         = Nil
+zipSumLeft (Cons x xs) (PTCons y ys) = Cons (takeLeft x y) (zipSumLeft xs ys)
 
 -- | Merge two `ProductType`s
 zipSumT :: ProductType l -> ProductType r -> ProductType (Merge l r)
-zipSumT (PTCons x xs) (PTCons y ys) = PTCons (takeST x y) (zipSumT xs ys)
+zipSumT PTNil PTNil                 = PTNil
 zipSumT PTNil (PTCons y ys)         = PTCons (makeUndefLeftT y) (zipSumT PTNil ys)
 zipSumT (PTCons x xs) PTNil         = PTCons (makeUndefRightT x) (zipSumT xs PTNil)
-zipSumT PTNil PTNil                 = PTNil
+zipSumT (PTCons x xs) (PTCons y ys) = PTCons (takeST x y) (zipSumT xs ys)
 
 makeUndefRightT :: SumType x -> SumType (x ++ '[Undef])
 makeUndefRightT (STSucc x xs) = STSucc x (makeUndefRightT xs)

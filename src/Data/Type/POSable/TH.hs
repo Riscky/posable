@@ -19,24 +19,15 @@ mkDec name =
         type Choices $name = 1
         choices _ = 0
 
+        type OuterChoices $name = 1
+
         type Fields $name = '[ '[$name]]
         fields x = Cons (Pick x) Nil
+
+        outerChoice _ = 0
 
         fromPOSable 0 (Cons (Pick x) Nil) = x
         fromPOSable _ _                   = error "index out of range"
 
         emptyFields = PTCons (STSucc (mkTypeRep @($name)) STZero) PTNil
   |]
-
--- instance POSable Double where
---   type Choices Double = 1
---   choices _ = 0
-
---   type Fields Double = '[ '[Double]]
---   fields x = Cons (Pick x) Nil
-
---   fromPOSable 0 (Cons (Pick x) Nil) = x
---   fromPOSable _ _                   = error "index out of range"
-
---   emptyFields = PTCons (STSucc (mkTypeRep @Double) STZero) PTNil
-

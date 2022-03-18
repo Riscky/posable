@@ -7,6 +7,7 @@
 {-# LANGUAGE TypeFamilyDependencies  #-}
 {-# LANGUAGE UndecidableInstances    #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
+{-# LANGUAGE RankNTypes              #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
@@ -15,11 +16,11 @@
 --   Also re-exports Generic.SOP, which is needed to derive POSable.
 module Data.Type.POSable.POSable (POSable(..), Generic, Finite) where
 
-import           Data.Finite                      (Finite, combineProduct,
+import           Data.Finite                      (combineProduct,
                                                    combineSum, separateProduct,
                                                    separateSum)
 import           Data.Type.POSable.Representation
-import           Generics.SOP                     hiding (Nil)
+import           Generics.SOP                     hiding (Nil, shift)
 import           Generics.SOP.NP                  hiding (Nil)
 
 import           Data.Kind                        (Type)
@@ -27,7 +28,9 @@ import           Data.Kind                        (Type)
 import qualified Generics.SOP                     as SOP
 
 import           GHC.Base                         (Nat)
-import           GHC.TypeLits                     (KnownNat, type (*), type (+))
+import           GHC.TypeLits                     (KnownNat, type (*), type (+), natVal)
+
+import Data.Finite.Internal
 
 -- | POSable, the base of this library. Provide a compact memory representation
 --   for a type and a function to get back to the original type.
@@ -40,6 +43,9 @@ class (KnownNat (Choices x)) => POSable x where
   type Choices x :: Nat
   type Choices x = GChoices (SOP I (Code x))
 
+  type OuterChoices x :: Nat
+  type OuterChoices x = GOuterChoices (SOP I (Code x))
+
   choices :: x -> Finite (Choices x)
   default choices ::
     ( Generic x
@@ -48,6 +54,14 @@ class (KnownNat (Choices x)) => POSable x where
     ) => x -> Finite (Choices x)
   choices x = gchoices $ from x
 
+  outerChoice :: Finite (Choices x) -> Finite (OuterChoices x)
+  default outerChoice ::
+    ( GPOSable (SOP I (Code x))
+    , GChoices (SOP I (Code x)) ~ Choices x
+    , GOuterChoices (SOP I (Code x)) ~ OuterChoices x
+    ) => Finite (Choices x) -> Finite (OuterChoices x)
+  outerChoice = gouterChoice @(SOP I (Code x))
+
   emptyChoices :: Finite (Choices x)
   emptyChoices = 0
 
@@ -55,7 +69,7 @@ class (KnownNat (Choices x)) => POSable x where
 
   default fromPOSable ::
     ( Generic x
-    , (GPOSable (SOP I (Code x)))
+    , GPOSable (SOP I (Code x))
     , Fields x ~ GFields (SOP I (Code x))
     , Choices x ~ GChoices (SOP I (Code x))
     ) => Finite (Choices x) -> Product (Fields x) -> x
@@ -84,9 +98,12 @@ class (KnownNat (Choices x)) => POSable x where
 
 -----------------------------------------------------------------------
 -- | Generic implementation of POSable,
-class (KnownNat (GChoices x)) => GPOSable x where
+class (KnownNat (GChoices x), KnownNat (GOuterChoices x)) => GPOSable x where
   type GChoices x :: Nat
   gchoices :: x -> Finite (GChoices x)
+
+  type GOuterChoices x :: Nat
+  gouterChoice :: Finite (GChoices x) -> Finite (GOuterChoices x)
 
   type GFields x :: [[Type]]
   gfields :: x -> Product (GFields x)
@@ -102,6 +119,7 @@ instance
   , KnownNat (Sums (MapProducts (Map2Choices xss)))
   , All2 KnownNat (Map2Choices xss)
   , All KnownNat (MapProducts (Map2Choices xss))
+  , KnownNat (Length xss)
   ) => GPOSable (SOP I xss) where
 
   type GChoices (SOP I xss) = Sums (MapProducts (Map2Choices xss))
@@ -111,6 +129,10 @@ instance
   gfields (SOP x)         = foldMerge
                               (mapConcatT (pureMap2Fields @xss))
                               (mapConcat (map2Fields x))
+
+  type GOuterChoices (SOP I xss) = Length xss
+
+  gouterChoice = getOuterChoice (pureChoices2 @xss)
 
   gemptyFields = foldMergeT $ mapConcatT (pureMap2Fields @xss)
 
@@ -122,12 +144,20 @@ instance
 -- Supporting types and classes
 --------------------------------------------------------------------------------
 
+type family Length (xs :: f x) :: Nat where
+  Length '[] = 0
+  Length (x ': xs) = Length xs + 1
+
+type family MapLength (xss :: f (g x)) :: f y where
+  MapLength '[] = '[]
+  MapLength (x ': xs) = Length x ': MapLength xs
+
 type family MapChoices (xs :: f x) = (r :: f Nat) | r -> f where
   MapChoices '[] = '[]
   MapChoices (x ': xs) = Choices x ': MapChoices xs
 
 
-type family Map2Choices (xss :: f (g x)) :: f (g Nat) where
+type family Map2Choices (xss :: f (g x)) = (r :: f (g Nat)) | r -> f g where
   Map2Choices '[] = '[]
   Map2Choices (xs ': xss) = MapChoices xs ': Map2Choices xss
 
@@ -142,11 +172,11 @@ type family Map2Fields (xss :: f (g x)) :: f (g [[Type]]) where
   Map2Fields (xs ': xss) = MapFields xs ': Map2Fields xss
 
 
-type family Products (xs :: f Nat) :: Nat where
+type family Products (xs :: f Nat) = (r :: Nat) where
   Products '[] = 1
   Products (x ': xs) = x * Products xs
 
-type family MapProducts (xss :: f (g Nat)) :: f Nat where
+type family MapProducts (xss :: f (g Nat)) = (r :: f Nat) | r -> f where
   MapProducts '[] = '[]
   MapProducts (xs ': xss) = Products xs ': MapProducts xss
 
@@ -349,3 +379,28 @@ unMergeLeft xs (ProductConcatFieldsT y :* ys) = splitProductLeft xs y (foldMerge
 
 unMergeRight :: forall xs xss . Product (Merge (Concat (MapFields xs)) (FoldMerge (MapConcat (Map2Fields xss)))) -> NP ProductConcatFieldsT (xs ': xss) -> Product (FoldMerge (MapConcat (Map2Fields xss)))
 unMergeRight xs (ProductConcatFieldsT y :* ys) = splitProductRight xs y (foldMergeT2 @xss ys)
+
+-------------------------------------------------------
+-- Functions that help with pattern matching
+
+getOuterChoice :: forall xss .
+  ( All KnownNat (MapProducts (Map2Choices xss))
+  , KnownNat (Sums (MapProducts (Map2Choices xss)))
+  , KnownNat (Length xss)
+  ) => NP ProductsMapChoices xss
+  -> Finite (Sums (MapProducts (Map2Choices xss)))
+  -> Finite (Length xss)
+getOuterChoice = go . convert
+  where
+    go :: [Integer] -> Finite (Sums (MapProducts (Map2Choices xss))) -> Finite (Length xss)
+    -- This error should never occur because the types restrict this path
+    go [] _ = error "constructor out of bounds"
+    go (x : xs) choice = if toInteger choice < x
+      then 0
+      else 1 + go xs (Finite $ toInteger choice - x)
+
+    convert :: All KnownNat (MapProducts (Map2Choices yss))
+       => NP ProductsMapChoices yss -> [Integer]
+    convert SOP.Nil = []
+    convert (ProductsMapChoices x :* xs) = natVal x : convert xs
+
