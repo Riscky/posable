@@ -1,13 +1,14 @@
 {-# LANGUAGE AllowAmbiguousTypes     #-}
 {-# LANGUAGE DefaultSignatures       #-}
+{-# LANGUAGE ExplicitNamespaces      #-}
 {-# LANGUAGE FlexibleContexts        #-}
 {-# LANGUAGE FlexibleInstances       #-}
 {-# LANGUAGE NoStarIsType            #-}
 {-# LANGUAGE PolyKinds               #-}
+{-# LANGUAGE RankNTypes              #-}
 {-# LANGUAGE TypeFamilyDependencies  #-}
 {-# LANGUAGE UndecidableInstances    #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
-{-# LANGUAGE RankNTypes              #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
@@ -16,9 +17,8 @@
 --   Also re-exports Generic.SOP, which is needed to derive POSable.
 module Data.Type.POSable.POSable (POSable(..), Generic, Finite) where
 
-import           Data.Finite                      (combineProduct,
-                                                   combineSum, separateProduct,
-                                                   separateSum)
+import           Data.Finite                      (combineProduct, combineSum,
+                                                   separateProduct, separateSum)
 import           Data.Type.POSable.Representation
 import           Generics.SOP                     hiding (Nil, shift)
 import           Generics.SOP.NP                  hiding (Nil)
@@ -28,9 +28,10 @@ import           Data.Kind                        (Type)
 import qualified Generics.SOP                     as SOP
 
 import           GHC.Base                         (Nat)
-import           GHC.TypeLits                     (KnownNat, type (*), type (+), natVal)
+import           GHC.TypeLits                     (KnownNat, natVal, type (*),
+                                                   type (+))
 
-import Data.Finite.Internal
+import           Data.Finite.Internal
 
 -- | POSable, the base of this library. Provide a compact memory representation
 --   for a type and a function to get back to the original type.
@@ -229,9 +230,9 @@ appends SOP.Nil   = Nil
 appends (x :* xs) = concatP x (appends xs)
 
 foldMerge :: NP ProductType xss -> NS Product xss -> Product (FoldMerge xss)
-foldMerge (_ :* SOP.Nil) (Z y) = y
-foldMerge (_ :* SOP.Nil) (S _) = error "Reached an inaccessible pattern"
-foldMerge SOP.Nil   _      = Nil
+foldMerge (_ :* SOP.Nil) (Z y)   = y
+foldMerge (_ :* SOP.Nil) (S _)   = error "Reached an inaccessible pattern"
+foldMerge SOP.Nil   _            = Nil
 foldMerge (_ :* x' :* xs) (Z y)  = zipSumLeft y (foldMergeT (x' :* xs))
 foldMerge (x :* x' :* xs) (S ys) = zipSumRight x (foldMerge (x' :* xs) ys)
 
@@ -401,6 +402,6 @@ getOuterChoice = go . convert
 
     convert :: All KnownNat (MapProducts (Map2Choices yss))
        => NP ProductsMapChoices yss -> [Integer]
-    convert SOP.Nil = []
+    convert SOP.Nil                      = []
     convert (ProductsMapChoices x :* xs) = natVal x : convert xs
 
