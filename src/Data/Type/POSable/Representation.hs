@@ -56,7 +56,7 @@ data ProductType :: [[Type]] -> Type where
   PTNil :: ProductType '[]
   PTCons :: SumType x -> ProductType xs -> ProductType (x ': xs)
 
-instance (All2 Show xs) => Show (ProductType xs) where
+instance (All2 Show (Map2TypeRep xs)) => Show (ProductType xs) where
   show PTNil         = "PTNil"
   show (PTCons a as) = "PTCons" ++ show a ++ " (" ++ show as ++ ")"
 
@@ -104,12 +104,16 @@ instance GroundType Undef where
 
 deriving instance (All Eq xs) => Eq (Sum xs)
 
-type family MapTypeRep (xsss :: f x) :: f y where
+type family MapTypeRep (xs :: f x) :: f y where
   MapTypeRep '[] = '[]
   MapTypeRep (x ': xs) = TypeRep x ': MapTypeRep xs
 
-instance Show (SumType x) where
-  show (STSucc x xs) = "STSucc someval (" ++ show xs ++ ")"
+type family Map2TypeRep (xss :: f x) :: f y where
+  Map2TypeRep '[] = '[]
+  Map2TypeRep (x ': xs) = MapTypeRep x ': Map2TypeRep xs
+
+instance (All Show (MapTypeRep xs)) => Show (SumType xs) where
+  show (STSucc x xs) = "STSucc" ++ show x ++ "(" ++ show xs ++ ")"
   show STZero        = "STZero"
 
 instance (All Show x) => Show (Sum x) where
