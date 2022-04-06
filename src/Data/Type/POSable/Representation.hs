@@ -44,9 +44,7 @@ infixr 5 ++
 -- Ground type class, can be filled by the library's user
 
 class GroundType a where
-  type TypeRep a :: Type
-
-  mkTypeRep :: TypeRep a
+  mkTypeRep :: a
 
 -----------------------------------------------------------------------
 -- Heterogeneous lists with explicit types
@@ -83,7 +81,7 @@ concatP (Cons x xs) ys = Cons x (concatP xs ys)
 
 -- | Type witness for `Sum`
 data SumType :: [Type] -> Type where
-  STSucc :: (GroundType x) => TypeRep x -> SumType xs -> SumType (x ': xs)
+  STSucc :: (GroundType x) => x -> SumType xs -> SumType (x ': xs)
   STZero :: SumType '[]
 
 -- | Typelevel sum, contains one value from the typelevel list of types, or
@@ -98,15 +96,13 @@ data Undef = Undef
 -- Undef is the only default GroundType, because we need to mark when no value
 -- is when 2 non-equal-lenght types are zipped
 instance GroundType Undef where
-  type TypeRep Undef = Undef
-
   mkTypeRep = Undef
 
 deriving instance (All Eq xs) => Eq (Sum xs)
 
 type family MapTypeRep (xs :: f x) :: f y where
   MapTypeRep '[] = '[]
-  MapTypeRep (x ': xs) = TypeRep x ': MapTypeRep xs
+  MapTypeRep (x ': xs) = x ': MapTypeRep xs
 
 type family Map2TypeRep (xss :: f x) :: f y where
   Map2TypeRep '[] = '[]
