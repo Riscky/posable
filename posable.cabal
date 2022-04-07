@@ -11,7 +11,7 @@ name:                posable
 -- PVP summary:      +-+------- breaking API changes
 --                   | | +----- non-breaking API additions
 --                   | | | +--- code changes with no API change
-version:             0.9.0.4
+version:             0.9.0.5
 tested-with:         GHC >= 8.10
 
 -- A short (one-line) description of the package.

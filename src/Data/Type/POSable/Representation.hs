@@ -31,7 +31,8 @@ module Data.Type.POSable.Representation
   , Undef(..)
 ) where
 import           Data.Kind
-import           Generics.SOP (All, All2)
+import           Data.Typeable (Typeable)
+import           Generics.SOP  (All, All2)
 
 -- | Concatenation of typelevel lists
 type family (++) (xs :: [k]) (ys :: [k]) :: [k] where
@@ -43,7 +44,7 @@ infixr 5 ++
 -----------------------------------------------------------------------
 -- Ground type class, can be filled by the library's user
 
-class GroundType a where
+class (Typeable a) => GroundType a where
   mkTypeRep :: a
 
 -----------------------------------------------------------------------
