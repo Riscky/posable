@@ -21,7 +21,7 @@ module Data.Type.POSable.Representation
   , FoldMerge
   , MapConcat
   , Concat
-  , GroundType(..)
+  , Ground(..)
   , zipSumT
   , zipSumLeft
   , zipSumRight
@@ -41,11 +41,14 @@ type family (++) (xs :: [k]) (ys :: [k]) :: [k] where
 
 infixr 5 ++
 
------------------------------------------------------------------------
--- Ground type class, can be filled by the library's user
 
-class (Typeable a) => GroundType a where
-  mkTypeRep :: a
+-- | The set of types that can exist in the sums.
+--   This set can be extended by the user by providing an instance of Ground
+--   for their types. The mkGround function gives a default value for the type.
+--   Ground depends on Typeable, as this makes it possible for library users
+--   to inspect the types of the contents of the sums.
+class (Typeable a) => Ground a where
+  mkGround :: a
 
 -----------------------------------------------------------------------
 -- Heterogeneous lists with explicit types
@@ -82,22 +85,22 @@ concatP (Cons x xs) ys = Cons x (concatP xs ys)
 
 -- | Type witness for `Sum`
 data SumType :: [Type] -> Type where
-  STSucc :: (GroundType x) => x -> SumType xs -> SumType (x ': xs)
+  STSucc :: (Ground x) => x -> SumType xs -> SumType (x ': xs)
   STZero :: SumType '[]
 
 -- | Typelevel sum, contains one value from the typelevel list of types, or
 --   undefined.
 data Sum :: [Type] -> Type where
-  Pick :: (GroundType x) => x -> Sum (x ': xs)
-  Skip :: (GroundType x) => Sum xs -> Sum (x ': xs)
+  Pick :: (Ground x) => x -> Sum (x ': xs)
+  Skip :: (Ground x) => Sum xs -> Sum (x ': xs)
 
 data Undef = Undef
   deriving (Eq, Show)
 
--- Undef is the only default GroundType, because we need to mark when no value
+-- Undef is the only default Ground, because we need to mark when no value
 -- is when 2 non-equal-lenght types are zipped
-instance GroundType Undef where
-  mkTypeRep = Undef
+instance Ground Undef where
+  mkGround = Undef
 
 deriving instance (All Eq xs) => Eq (Sum xs)
 

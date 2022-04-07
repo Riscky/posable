@@ -28,14 +28,14 @@ data Test a b c = C1 a
 
 -- Define a set of types that can be the ground types of the POSable
 -- representation. Only types in this set can occur in Fields.
-instance GroundType Float where
-  mkTypeRep = 0.0
+instance Ground Float where
+  mkGround = 0.0
 
-instance GroundType Double where
-  mkTypeRep = 0
+instance Ground Double where
+  mkGround = 0
 
 
 -- Define a POSable instance for these ground types
-mkPOSableGroundType ''Float
+mkPOSableGround ''Float
 
-mkPOSableGroundType ''Double
+mkPOSableGround ''Double

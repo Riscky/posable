@@ -26,40 +26,30 @@ import           Test.Tasty.QuickCheck
 propInjectivity :: (POSable a, Arbitrary a, Eq a) => a -> Bool
 propInjectivity x = fromPOSable (choices x) (fields x) == x
 
-instance GroundType Float where
-  type TypeRep Float = Float
+instance Ground Float where
+  mkGround = 0
 
-  mkTypeRep = 0
+instance Ground Double where
+  mkGround = 0
 
-instance GroundType Double where
-  type TypeRep Double = Double
+instance Ground Char where
+  mkGround = '0'
 
-  mkTypeRep = 0
+instance Ground Int where
+  mkGround = 0
 
-instance GroundType Char where
-  type TypeRep Char = Char
+instance Ground Word where
+  mkGround = 0
 
-  mkTypeRep = '0'
+mkPOSableGround ''Float
 
-instance GroundType Int where
-  type TypeRep Int = Int
+mkPOSableGround ''Double
 
-  mkTypeRep = 0
+mkPOSableGround ''Char
 
-instance GroundType Word where
-  type TypeRep Word = Word
+mkPOSableGround ''Int
 
-  mkTypeRep = 0
-
-mkPOSableGroundType ''Float
-
-mkPOSableGroundType ''Double
-
-mkPOSableGroundType ''Char
-
-mkPOSableGroundType ''Int
-
-mkPOSableGroundType ''Word
+mkPOSableGround ''Word
 
 $(runQ $ do
   -- generate :: Int -> (Int -> a) -> [a]
