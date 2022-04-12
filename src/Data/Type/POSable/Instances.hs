@@ -13,6 +13,7 @@
 module Data.Type.POSable.Instances (POSable) where
 
 import           Data.Type.POSable.POSable
+import           Data.Type.POSable.Representation
 import           Language.Haskell.TH
 
 -----------------------------------------------------------------------
@@ -23,6 +24,8 @@ deriving instance (POSable l, POSable r) => POSable (Either l r)
 deriving instance POSable Ordering
 
 deriving instance POSable ()
+
+deriving instance POSable Undef
 
 -- Instances for tuples of length 2 - 16
 runQ $ do

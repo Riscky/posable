@@ -1,5 +1,7 @@
 {-# LANGUAGE AllowAmbiguousTypes   #-}
 {-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE ExplicitNamespaces    #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -32,7 +34,8 @@ module Data.Type.POSable.Representation
 ) where
 import           Data.Kind
 import           Data.Typeable (Typeable)
-import           Generics.SOP  (All, All2)
+import           GHC.Generics  as GHC
+import           Generics.SOP  as SOP (All, All2, Generic)
 
 -- | Concatenation of typelevel lists
 type family (++) (xs :: [k]) (ys :: [k]) :: [k] where
@@ -95,7 +98,7 @@ data Sum :: [Type] -> Type where
   Skip :: (Ground x) => Sum xs -> Sum (x ': xs)
 
 data Undef = Undef
-  deriving (Eq, Show)
+  deriving (Eq, Show, GHC.Generic, SOP.Generic)
 
 -- Undef is the only default Ground, because we need to mark when no value
 -- is when 2 non-equal-lenght types are zipped
