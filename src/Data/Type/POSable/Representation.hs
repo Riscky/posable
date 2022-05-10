@@ -106,11 +106,11 @@ instance Ground Undef where
 
 deriving instance (All Eq xs) => Eq (Sum xs)
 
-type family MapTypeRep (xs :: f x) :: f y where
+type family MapTypeRep (xs :: [Type]) :: [Type] where
   MapTypeRep '[] = '[]
   MapTypeRep (x ': xs) = x ': MapTypeRep xs
 
-type family Map2TypeRep (xss :: f x) :: f y where
+type family Map2TypeRep (xss :: [[Type]]) :: [[Type]] where
   Map2TypeRep '[] = '[]
   Map2TypeRep (x ': xs) = MapTypeRep x ': Map2TypeRep xs
 
@@ -145,7 +145,7 @@ data H
 -- Concat '[ '[A, B], '[C, D]] :: [Type]
 -- = '[A, B, C, D]
 --
-type family Concat (xss :: f (g x)) :: g x where
+type family Concat (xss :: [[x]]) :: [x] where
   Concat '[] = '[]
   Concat (xs ': xss) = xs ++ Concat xss
 
@@ -159,7 +159,7 @@ type family Concat (xss :: f (g x)) :: g x where
 -- MapConcat '[ '[ '[A, B], '[C, D]], '[[E, F], '[G, H]]] :: [[Type]]
 -- = '[ '[A, B, C, D], '[E, F, G, H]]
 --
-type family MapConcat (xsss :: f (g (h x))) :: f (h x) where
+type family MapConcat (xsss :: [[[x]]]) :: [[x]] where
   MapConcat '[] = '[]
   MapConcat (xss ': xsss) = Concat xss ': MapConcat xsss
 
@@ -172,7 +172,7 @@ type family MapConcat (xsss :: f (g (h x))) :: f (h x) where
 -- Merge '[ '[A, B, C], '[D, E]] '[ '[F, G]] :: [[Type]]
 -- = '[ '[A, B, C, F, G], '[D, E]]
 --
-type family Merge (xs :: f (g x)) (ys :: g (f x)) :: g (f x) where
+type family Merge (xs :: [[Type]]) (ys :: [[Type]]) :: [[Type]] where
   Merge '[] '[] = '[]
   Merge '[] (b ': bs) = (Undef ': b) ': Merge '[] bs
   Merge (a ': as) '[] = (a ++ '[Undef]) ': Merge as '[]
@@ -186,7 +186,7 @@ type family Merge (xs :: f (g x)) (ys :: g (f x)) :: g (f x) where
 -- FoldMerge '[ '[ '[A, B, C], '[D, E]], '[ '[F, G]], '[ '[H]]] :: [[Type]]
 -- = '[ '[A, B, C, F, G, H], '[D, E]]
 --
-type family FoldMerge (xss :: f (g x)) :: g x where
+type family FoldMerge (xss :: [[[Type]]]) :: [[Type]] where
   FoldMerge '[a] = a
   FoldMerge (a ': as) = Merge a (FoldMerge as)
   FoldMerge '[] = '[]

@@ -145,43 +145,43 @@ instance
 -- Supporting types and classes
 --------------------------------------------------------------------------------
 
-type family Length (xs :: f x) :: Nat where
+type family Length (xs :: [x]) :: Nat where
   Length '[] = 0
   Length (x ': xs) = Length xs + 1
 
-type family MapLength (xss :: f (g x)) :: f y where
+type family MapLength (xss :: [[x]]) :: [Nat] where
   MapLength '[] = '[]
   MapLength (x ': xs) = Length x ': MapLength xs
 
-type family MapChoices (xs :: f x) = (r :: f Nat) | r -> f where
+type family MapChoices (xs :: [Type]) :: [Nat] where
   MapChoices '[] = '[]
   MapChoices (x ': xs) = Choices x ': MapChoices xs
 
 
-type family Map2Choices (xss :: f (g x)) = (r :: f (g Nat)) | r -> f g where
+type family Map2Choices (xss :: [[Type]]) :: [[Nat]] where
   Map2Choices '[] = '[]
   Map2Choices (xs ': xss) = MapChoices xs ': Map2Choices xss
 
 
-type family MapFields (xs :: f x) = (r :: f [[Type]]) | r -> f where
+type family MapFields (xs :: [Type]) :: [[[Type]]] where
   MapFields '[] = '[]
   MapFields (x ': xs) = Fields x ': MapFields xs
 
 
-type family Map2Fields (xss :: f (g x)) :: f (g [[Type]]) where
+type family Map2Fields (xss :: [[Type]]) :: [[[[Type]]]] where
   Map2Fields '[] = '[]
   Map2Fields (xs ': xss) = MapFields xs ': Map2Fields xss
 
 
-type family Products (xs :: f Nat) = (r :: Nat) where
+type family Products (xs :: [Nat]) :: Nat where
   Products '[] = 1
   Products (x ': xs) = x * Products xs
 
-type family MapProducts (xss :: f (g Nat)) = (r :: f Nat) | r -> f where
+type family MapProducts (xss :: [[Nat]]) :: [Nat] where
   MapProducts '[] = '[]
   MapProducts (xs ': xss) = Products xs ': MapProducts xss
 
-type family Sums (xs :: f Nat) :: Nat where
+type family Sums (xs :: [Nat]) :: Nat where
   Sums '[] = 0
   Sums (x ': xs) = x + Sums xs
 
