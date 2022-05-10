@@ -7,3 +7,4 @@
   - "-XScopedTypeVariables"
   - "-XTypeFamilies"
   - "-XGADTs"
+  - "-XDeriveAnyClass"
