@@ -233,8 +233,8 @@ foldMerge :: NP ProductType xss -> NS Product xss -> Product (FoldMerge xss)
 foldMerge (_ :* SOP.Nil) (Z y)   = y
 foldMerge (_ :* SOP.Nil) (S _)   = error "Reached an inaccessible pattern"
 foldMerge SOP.Nil   _            = Nil
-foldMerge (_ :* x' :* xs) (Z y)  = zipSumLeft y (foldMergeT (x' :* xs))
-foldMerge (x :* x' :* xs) (S ys) = zipSumRight x (foldMerge (x' :* xs) ys)
+foldMerge (_ :* x' :* xs) (Z y)  = merge $ Left (y, foldMergeT (x' :* xs))
+foldMerge (x :* x' :* xs) (S ys) = merge $ Right (x, foldMerge (x' :* xs) ys)
 
 appendsT :: NP ProductType xs -> ProductType (Concat xs)
 appendsT SOP.Nil   = PTNil
@@ -247,7 +247,7 @@ mapConcatT (x :* xs) = appendsT x :* mapConcatT xs
 foldMergeT :: NP ProductType xss -> ProductType (FoldMerge xss)
 foldMergeT (x :* SOP.Nil)  = x
 foldMergeT SOP.Nil         = PTNil
-foldMergeT (x :* x' :* xs) = zipSumT x (foldMergeT (x' :* xs))
+foldMergeT (x :* x' :* xs) = mergeT x (foldMergeT (x' :* xs))
 
 --------------------------------------------------------------------------------
 -- Functions that deal with creating Products from types
@@ -344,7 +344,7 @@ zipFromPOSable (FChoices c :* cs) (ProductFields f :* fs) = I (fromPOSable c f) 
 foldMergeT2 :: NP ProductConcatFieldsT xss -> ProductType (FoldMerge (MapConcat (Map2Fields xss)))
 foldMergeT2 (ProductConcatFieldsT x :* SOP.Nil)  = x
 foldMergeT2 SOP.Nil                              = PTNil
-foldMergeT2 (ProductConcatFieldsT x :* x' :* xs) = zipSumT x (foldMergeT2 (x' :* xs))
+foldMergeT2 (ProductConcatFieldsT x :* x' :* xs) = mergeT x (foldMergeT2 (x' :* xs))
 
 unSums :: (All KnownNat (MapProducts (Map2Choices xs))) => Finite (Sums (MapProducts (Map2Choices xs))) -> NP ProductsMapChoices xs -> NS ProductsMapChoices xs
 unSums _ SOP.Nil = error "Cannot construct empty sum"
@@ -376,10 +376,10 @@ unConcat xs  (ProductFieldsT ys :* yss) = ProductFields x' :* unConcat xs' yss
     (x', xs') = unConcatP xs ys
 
 unMergeLeft :: forall xs xss . Product (Merge (Concat (MapFields xs)) (FoldMerge (MapConcat (Map2Fields xss)))) -> NP ProductConcatFieldsT (xs ': xss) -> Product (Concat (MapFields xs))
-unMergeLeft xs (ProductConcatFieldsT y :* ys) = splitProductLeft xs y (foldMergeT2 @xss ys)
+unMergeLeft xs (ProductConcatFieldsT y :* ys) = splitLeft xs y (foldMergeT2 @xss ys)
 
 unMergeRight :: forall xs xss . Product (Merge (Concat (MapFields xs)) (FoldMerge (MapConcat (Map2Fields xss)))) -> NP ProductConcatFieldsT (xs ': xss) -> Product (FoldMerge (MapConcat (Map2Fields xss)))
-unMergeRight xs (ProductConcatFieldsT y :* ys) = splitProductRight xs y (foldMergeT2 @xss ys)
+unMergeRight xs (ProductConcatFieldsT y :* ys) = splitRight xs y (foldMergeT2 @xss ys)
 
 -------------------------------------------------------
 -- Functions that help with pattern matching

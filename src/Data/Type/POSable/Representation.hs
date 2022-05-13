@@ -23,11 +23,10 @@ module Data.Type.POSable.Representation
   , MapConcat
   , Concat
   , Ground(..)
-  , zipSumT
-  , zipSumLeft
-  , zipSumRight
-  , splitProductLeft
-  , splitProductRight
+  , mergeT
+  , merge
+  , splitLeft
+  , splitRight
   , unConcatP
   , Undef(..)
 ) where
@@ -216,6 +215,11 @@ takeLeftUndef :: Sum x -> Sum (x ++ '[Undef])
 takeLeftUndef (Pick x)  = Pick x
 takeLeftUndef (Skip xs) = Skip (takeLeftUndef xs)
 
+-- | Merge a `ProductType` and a `Product`
+merge :: Either (Product l, ProductType r) (ProductType l, Product r) -> Product (Merge l r)
+merge (Left (l, r))  = zipSumLeft l r
+merge (Right (l, r)) = zipSumRight l r
+
 -- | Merge a `ProductType` and a `Product`, putting the values of the `Product`
 --   in the left argument of `Merge`
 zipSumLeft :: Product l -> ProductType r -> Product (Merge l r)
@@ -225,11 +229,11 @@ zipSumLeft (Cons x xs) PTNil         = Cons (takeLeftUndef x) (zipSumLeft xs PTN
 zipSumLeft (Cons x xs) (PTCons y ys) = Cons (takeLeft x y) (zipSumLeft xs ys)
 
 -- | Merge two `ProductType`s
-zipSumT :: ProductType l -> ProductType r -> ProductType (Merge l r)
-zipSumT PTNil PTNil                 = PTNil
-zipSumT PTNil (PTCons y ys)         = PTCons (makeUndefLeftT y) (zipSumT PTNil ys)
-zipSumT (PTCons x xs) PTNil         = PTCons (makeUndefRightT x) (zipSumT xs PTNil)
-zipSumT (PTCons x xs) (PTCons y ys) = PTCons (takeST x y) (zipSumT xs ys)
+mergeT :: ProductType l -> ProductType r -> ProductType (Merge l r)
+mergeT PTNil PTNil                 = PTNil
+mergeT PTNil (PTCons y ys)         = PTCons (makeUndefLeftT y) (mergeT PTNil ys)
+mergeT (PTCons x xs) PTNil         = PTCons (makeUndefRightT x) (mergeT xs PTNil)
+mergeT (PTCons x xs) (PTCons y ys) = PTCons (takeST x y) (mergeT xs ys)
 
 makeUndefRightT :: SumType x -> SumType (x ++ '[Undef])
 makeUndefRightT (STSucc x xs) = STSucc x (makeUndefRightT xs)
@@ -252,10 +256,10 @@ takeRight STZero        rs = rs
 
 -- | UnMerge a `Product`, using two `ProductType`s as witnesses for the left and
 --   right argument of `Merge`. Produces a value of type Product right
-splitProductRight :: Product (Merge l r) -> ProductType l -> ProductType r -> Product r
-splitProductRight (Cons x xs) PTNil (PTCons _ rs) = Cons (removeUndefLeft x) (splitProductRight xs PTNil rs)
-splitProductRight _  _ PTNil = Nil
-splitProductRight (Cons x xs) (PTCons l ls) (PTCons r rs) = Cons (splitSumRight x l r) (splitProductRight xs ls rs)
+splitRight :: Product (Merge l r) -> ProductType l -> ProductType r -> Product r
+splitRight (Cons x xs) PTNil (PTCons _ rs) = Cons (removeUndefLeft x) (splitRight xs PTNil rs)
+splitRight _  _ PTNil = Nil
+splitRight (Cons x xs) (PTCons l ls) (PTCons r rs) = Cons (splitSumRight x l r) (splitRight xs ls rs)
 
 removeUndefLeft :: Sum (Undef ': x) -> Sum x
 removeUndefLeft (Pick Undef) = error "Undefined value where I expected an actual value"
@@ -268,10 +272,10 @@ removeUndefRight (STSucc _ xs) (Skip ys) = Skip (removeUndefRight xs ys)
 
 -- | UnMerge a `Product`, using two `ProductType`s as witnesses for the left and
 --   right argument of `Merge`. Produces a value of type Product left
-splitProductLeft :: Product (Merge l r) -> ProductType l -> ProductType r -> Product l
-splitProductLeft _ PTNil _ = Nil
-splitProductLeft (Cons x xs) (PTCons l ls) PTNil = Cons (removeUndefRight l x) (splitProductLeft xs ls PTNil)
-splitProductLeft (Cons x xs) (PTCons l ls) (PTCons r rs) = Cons (splitSumLeft x l r) (splitProductLeft xs ls rs)
+splitLeft :: Product (Merge l r) -> ProductType l -> ProductType r -> Product l
+splitLeft _ PTNil _ = Nil
+splitLeft (Cons x xs) (PTCons l ls) PTNil = Cons (removeUndefRight l x) (splitLeft xs ls PTNil)
+splitLeft (Cons x xs) (PTCons l ls) (PTCons r rs) = Cons (splitSumLeft x l r) (splitLeft xs ls rs)
 
 splitSumRight :: Sum (l ++ r) -> SumType l -> SumType r -> Sum r
 splitSumRight xs        STZero        _  = xs
