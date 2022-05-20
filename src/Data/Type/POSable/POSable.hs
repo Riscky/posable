@@ -28,8 +28,7 @@ import           Data.Kind                        (Type)
 import qualified Generics.SOP                     as SOP
 
 import           GHC.Base                         (Nat)
-import           GHC.TypeLits                     (KnownNat, natVal, type (*),
-                                                   type (+))
+import           GHC.TypeLits                     (KnownNat, type (*), type (+))
 
 import           Data.Finite.Internal
 
@@ -44,9 +43,6 @@ class (KnownNat (Choices x)) => POSable x where
   type Choices x :: Nat
   type Choices x = GChoices (SOP I (Code x))
 
-  type OuterChoices x :: Nat
-  type OuterChoices x = GOuterChoices (SOP I (Code x))
-
   choices :: x -> Finite (Choices x)
   default choices ::
     ( Generic x
@@ -54,14 +50,6 @@ class (KnownNat (Choices x)) => POSable x where
     , GChoices (SOP I (Code x)) ~ Choices x
     ) => x -> Finite (Choices x)
   choices x = gchoices $ from x
-
-  outerChoice :: Finite (Choices x) -> Finite (OuterChoices x)
-  default outerChoice ::
-    ( GPOSable (SOP I (Code x))
-    , GChoices (SOP I (Code x)) ~ Choices x
-    , GOuterChoices (SOP I (Code x)) ~ OuterChoices x
-    ) => Finite (Choices x) -> Finite (OuterChoices x)
-  outerChoice = gouterChoice @(SOP I (Code x))
 
   emptyChoices :: Finite (Choices x)
   emptyChoices = 0
@@ -99,12 +87,9 @@ class (KnownNat (Choices x)) => POSable x where
 
 -----------------------------------------------------------------------
 -- | Generic implementation of POSable,
-class (KnownNat (GChoices x), KnownNat (GOuterChoices x)) => GPOSable x where
+class (KnownNat (GChoices x)) => GPOSable x where
   type GChoices x :: Nat
   gchoices :: x -> Finite (GChoices x)
-
-  type GOuterChoices x :: Nat
-  gouterChoice :: Finite (GChoices x) -> Finite (GOuterChoices x)
 
   type GFields x :: [[Type]]
   gfields :: x -> Product (GFields x)
@@ -130,10 +115,6 @@ instance
   gfields (SOP x)         = foldMerge
                               (mapConcatT (pureMap2Fields @xss))
                               (mapConcat (map2Fields x))
-
-  type GOuterChoices (SOP I xss) = Length xss
-
-  gouterChoice = getOuterChoice (pureChoices2 @xss)
 
   gemptyFields = foldMergeT $ mapConcatT (pureMap2Fields @xss)
 
@@ -380,28 +361,3 @@ unMergeLeft xs (ProductConcatFieldsT y :* ys) = splitLeft xs y (foldMergeT2 @xss
 
 unMergeRight :: forall xs xss . Product (Merge (Concat (MapFields xs)) (FoldMerge (MapConcat (Map2Fields xss)))) -> NP ProductConcatFieldsT (xs ': xss) -> Product (FoldMerge (MapConcat (Map2Fields xss)))
 unMergeRight xs (ProductConcatFieldsT y :* ys) = splitRight xs y (foldMergeT2 @xss ys)
-
--------------------------------------------------------
--- Functions that help with pattern matching
-
-getOuterChoice :: forall xss .
-  ( All KnownNat (MapProducts (Map2Choices xss))
-  , KnownNat (Sums (MapProducts (Map2Choices xss)))
-  , KnownNat (Length xss)
-  ) => NP ProductsMapChoices xss
-  -> Finite (Sums (MapProducts (Map2Choices xss)))
-  -> Finite (Length xss)
-getOuterChoice = go . convert
-  where
-    go :: [Integer] -> Finite (Sums (MapProducts (Map2Choices xss))) -> Finite (Length xss)
-    -- This error should never occur because the types restrict this path
-    go [] _ = error "constructor out of bounds"
-    go (x : xs) choice = if toInteger choice < x
-      then 0
-      else 1 + go xs (Finite $ toInteger choice - x)
-
-    convert :: All KnownNat (MapProducts (Map2Choices yss))
-       => NP ProductsMapChoices yss -> [Integer]
-    convert SOP.Nil                      = []
-    convert (ProductsMapChoices x :* xs) = natVal x : convert xs
-
