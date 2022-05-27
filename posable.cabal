@@ -11,7 +11,7 @@ name:                posable
 -- PVP summary:      +-+------- breaking API changes
 --                   | | +----- non-breaking API additions
 --                   | | | +--- code changes with no API change
-version:             0.9.0.5
+version:             0.10.0.0
 tested-with:         GHC >= 8.10
 
 -- A short (one-line) description of the package.
@@ -47,10 +47,10 @@ build-type:          Simple
 
 library
   -- Modules included in this executable, other than Main.
-  exposed-modules:       Data.Type.POSable.POSable
-                       , Data.Type.POSable.Instances
-                       , Data.Type.POSable.Representation
-                       , Data.Type.POSable.TH
+  exposed-modules:       Generics.POSable.POSable
+                       , Generics.POSable.Instances
+                       , Generics.POSable.Representation
+                       , Generics.POSable.TH
 
   other-modules:         Examples
 

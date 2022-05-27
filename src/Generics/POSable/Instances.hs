@@ -10,10 +10,10 @@
 
 -- | This module contains instances of `POSable` for all Haskell prelude data types
 --   as well as fixed size integers from Data.Int (`Int8`, `Int16`, `Int32` and `Int64`)
-module Data.Type.POSable.Instances (POSable) where
+module Generics.POSable.Instances (POSable) where
 
-import           Data.Type.POSable.POSable
-import           Data.Type.POSable.Representation
+import           Generics.POSable.POSable
+import           Generics.POSable.Representation
 import           Language.Haskell.TH
 
 -----------------------------------------------------------------------

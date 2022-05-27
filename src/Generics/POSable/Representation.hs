@@ -10,7 +10,7 @@
 
 -- | This module exports the `Product` and `Sum` type, and type- and valuelevel
 --   functions on these types.
-module Data.Type.POSable.Representation
+module Generics.POSable.Representation
   ( type (++)
   , ProductType(..)
   , concatPT

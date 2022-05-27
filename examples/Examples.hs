@@ -14,10 +14,10 @@
 module Examples () where
 
 -- POSable re-exports SOP.Generic
-import           Data.Type.POSable.POSable        as POSable
-import           Data.Type.POSable.Representation
-import           Data.Type.POSable.TH
-import           GHC.Generics                     as GHC
+import           GHC.Generics                    as GHC
+import           Generics.POSable.POSable        as POSable
+import           Generics.POSable.Representation
+import           Generics.POSable.TH
 
 data Test a b c = C1 a
                 | C2 b

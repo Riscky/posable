@@ -4,10 +4,10 @@
 
 {-# OPTIONS_GHC -ddump-splices #-}
 
-module Data.Type.POSable.TH (mkPOSableGround) where
+module Generics.POSable.TH (mkPOSableGround) where
 
-import           Data.Type.POSable.POSable
-import           Data.Type.POSable.Representation
+import           Generics.POSable.POSable
+import           Generics.POSable.Representation
 import           Language.Haskell.TH
 
 mkPOSableGround :: Name -> DecsQ

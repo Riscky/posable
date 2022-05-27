@@ -11,16 +11,16 @@
 
 module Main where
 
-import           Data.Type.POSable.Instances      ()
-import           Data.Type.POSable.POSable        as POSable
-import           Data.Type.POSable.Representation
-import           Data.Type.POSable.TH
-import           GHC.Generics                     as GHC (Generic)
+import           GHC.Generics                    as GHC (Generic)
+import           Generics.POSable.Instances      ()
+import           Generics.POSable.POSable        as POSable
+import           Generics.POSable.Representation
+import           Generics.POSable.TH
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Lib
-import           Test.Tasty                       (TestTree, defaultMain,
-                                                   testGroup)
-import           Test.Tasty.HUnit                 (testCase, (@?=))
+import           Test.Tasty                      (TestTree, defaultMain,
+                                                  testGroup)
+import           Test.Tasty.HUnit                (testCase, (@?=))
 import           Test.Tasty.QuickCheck
 
 propInjectivity :: (POSable a, Arbitrary a, Eq a) => a -> Bool

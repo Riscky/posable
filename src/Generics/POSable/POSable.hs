@@ -15,20 +15,20 @@
 
 -- | Exports the `POSable` class, which has a generic implementation `GPOSable`.
 --   Also re-exports Generic.SOP, which is needed to derive POSable.
-module Data.Type.POSable.POSable (POSable(..), Generic, Finite) where
+module Generics.POSable.POSable (POSable(..), Generic, Finite) where
 
-import           Data.Finite                      (combineProduct, combineSum,
-                                                   separateProduct, separateSum)
-import           Data.Type.POSable.Representation
-import           Generics.SOP                     hiding (Nil, shift)
-import           Generics.SOP.NP                  hiding (Nil)
+import           Data.Finite                     (combineProduct, combineSum,
+                                                  separateProduct, separateSum)
+import           Generics.POSable.Representation
+import           Generics.SOP                    hiding (Nil, shift)
+import           Generics.SOP.NP                 hiding (Nil)
 
-import           Data.Kind                        (Type)
+import           Data.Kind                       (Type)
 
-import qualified Generics.SOP                     as SOP
+import qualified Generics.SOP                    as SOP
 
-import           GHC.Base                         (Nat)
-import           GHC.TypeLits                     (KnownNat, type (*), type (+))
+import           GHC.Base                        (Nat)
+import           GHC.TypeLits                    (KnownNat, type (*), type (+))
 
 import           Data.Finite.Internal
 
