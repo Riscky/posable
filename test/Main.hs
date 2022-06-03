@@ -180,6 +180,22 @@ tests = testGroup "Test Choices and Fields of basic data types"
     , testProperty "Large product" $
         propInjectivity @LONGPRODUCT
     ]
+  , testGroup "tags"
+    [ testCase "Bool" $
+        tags @Bool @?= [1,1]
+    , testCase "Either Int Float" $
+        tags @(Either Int Float) @?= [1,1]
+    , testCase "Either Bool Bool" $
+        tags @(Either Bool Bool) @?= [2,2]
+    , testCase "Either (Maybe Int) Float" $
+        tags @(Either (Maybe Int) Float) @?= [2,1]
+    , testCase "Unit" $
+        tags @() @?= [1]
+    , testCase "Float" $
+        tags @() @?= [1]
+    , testCase "(Float, Bool, Bool)" $
+        tags @(Float, Bool, Bool) @?= [4]
+    ]
   , thtests
   ]
 

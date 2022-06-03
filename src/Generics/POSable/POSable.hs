@@ -28,7 +28,8 @@ import           Data.Kind                       (Type)
 import qualified Generics.SOP                    as SOP
 
 import           GHC.Base                        (Nat)
-import           GHC.TypeLits                    (KnownNat, type (*), type (+))
+import           GHC.TypeLits                    (KnownNat, natVal, type (*),
+                                                  type (+))
 
 import           Data.Finite.Internal
 
@@ -46,10 +47,26 @@ class (KnownNat (Choices x)) => POSable x where
   choices :: x -> Finite (Choices x)
   default choices ::
     ( Generic x
-    , (GPOSable (SOP I (Code x)))
+    , GPOSable (SOP I (Code x))
     , GChoices (SOP I (Code x)) ~ Choices x
     ) => x -> Finite (Choices x)
   choices x = gchoices $ from x
+
+  -- | The `tags` function returns the range of each constructor.
+  --   A few examples:
+  --   >>> tags @Bool
+  --   [1,1]
+  --   >>> tags @(Either Float Float)
+  --   [1,1]
+  --   >>> tags @(Bool, Bool)
+  --   [4]
+  --   >>> tags @(Either Bool Bool)
+  --   [2,2]
+  tags :: [Integer]
+  default tags ::
+    ( GPOSable (SOP I (Code x))
+    ) => [Integer]
+  tags = gtags @(SOP I (Code x))
 
   fromPOSable :: Finite (Choices x) -> Product (Fields x) -> x
 
@@ -88,6 +105,8 @@ class (KnownNat (GChoices x)) => GPOSable x where
   type GChoices x :: Nat
   gchoices :: x -> Finite (GChoices x)
 
+  gtags :: [Integer]
+
   type GFields x :: [[Type]]
   gfields :: x -> Product (GFields x)
 
@@ -108,6 +127,8 @@ instance
   type GChoices (SOP I xss) = Sums (MapProducts (Map2Choices xss))
   gchoices x = sums $ mapProducts $ map2choices $ unSOP x
 
+  gtags = getTags (pureChoices2 @xss)
+
   type GFields (SOP I xss) = FoldMerge (MapConcat (Map2Fields xss))
   gfields (SOP x)         = foldMerge
                               (mapConcatT (pureMap2Fields @xss))
@@ -118,6 +139,11 @@ instance
   gfromPOSable cs fs = SOP (mapFromPOSable cs' fs (pureConcatFields @xss))
     where
       cs' = unSums cs (pureChoices2 @xss)
+
+
+getTags :: All KnownNat (MapProducts (Map2Choices xss)) => NP ProductsMapChoices xss -> [Integer]
+getTags SOP.Nil                      = []
+getTags (ProductsMapChoices x :* xs) = natVal x : getTags xs
 
 --------------------------------------------------------------------------------
 -- Supporting types and classes

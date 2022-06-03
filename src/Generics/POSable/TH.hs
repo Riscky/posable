@@ -22,6 +22,10 @@ mkDec name =
         type Fields $name = '[ '[$name]]
         fields x = Cons (Pick x) Nil
 
+        -- A singleton type has only a single tag, which is 0
+        -- The upper bound of this first range is 1
+        tags = [1]
+
         fromPOSable 0 (Cons (Pick x) Nil) = x
         fromPOSable _ _                   = error "index out of range"
 
