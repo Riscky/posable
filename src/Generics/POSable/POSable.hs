@@ -51,9 +51,6 @@ class (KnownNat (Choices x)) => POSable x where
     ) => x -> Finite (Choices x)
   choices x = gchoices $ from x
 
-  emptyChoices :: Finite (Choices x)
-  emptyChoices = 0
-
   fromPOSable :: Finite (Choices x) -> Product (Fields x) -> x
 
   default fromPOSable ::
@@ -298,10 +295,7 @@ pureMapChoices = convert $ pureChoices @xs
     convert (FChoices x :* xs) = x :* convert xs
 
 pureChoices :: (All POSable xs) => NP FChoices xs
-pureChoices = cpure_NP (Proxy :: Proxy POSable) pureFChoices
-  where
-    pureFChoices :: forall x . (POSable x) => FChoices x
-    pureFChoices = FChoices $ emptyChoices @x
+pureChoices = cpure_NP (Proxy :: Proxy POSable) (FChoices 0)
 
 pure2Choices :: (All2 POSable xss) => NP FMapChoices xss
 pure2Choices = cpure_NP (Proxy :: Proxy (All POSable)) pureFMapChoices
