@@ -5,13 +5,15 @@ cabal-version:       2.2
 -- The name of the package.
 name:                posable
 
+synopsis:            A product-of-sums generics library
+
 description:         A generics library that represents a non-recursive Haskell 98
-                     datatype as a recursive tagged union. That means each type
-                     is represented with a single tag, and a product of sums of
-                     fields. The tag represents all constructor choices in the
-                     type, the fields contain all the values in the type.
-                     This representation maps easily to a struct of unions,
-                     which is a memory-efficient way to store sum datatypes.
+                     datatype as a product-of-sums. Each type is represented
+                     with a single tag, and a product of sums of fields. The tag
+                     represents all constructor choices in the type, the fields
+                     contain all the values in the type. This representation
+                     maps easily to a struct of unions, which is a
+                     memory-efficient way to store sum datatypes.
 
 category:            Generics
 
