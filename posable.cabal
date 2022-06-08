@@ -5,6 +5,16 @@ cabal-version:       2.2
 -- The name of the package.
 name:                posable
 
+description:         A generics library that represents a non-recursive Haskell 98
+                     datatype as a recursive tagged union. That means each type
+                     is represented with a single tag, and a product of sums of
+                     fields. The tag represents all constructor choices in the
+                     type, the fields contain all the values in the type.
+                     This representation maps easily to a struct of unions,
+                     which is a memory-efficient way to store sum datatypes.
+
+category:            Generics
+
 -- The package version.  See the Haskell package versioning policy (PVP)
 -- for standards guiding when and how versions should be incremented.
 -- https://wiki.haskell.org/Package_versioning_policy
@@ -58,10 +68,10 @@ library
   -- other-extensions:
 
   -- Other library packages from which modules are imported.
-  build-depends:       base                  >= 4.14.0 && < 4.15
+  build-depends:       base                  >= 4.15.0 && < 4.16
                      , finite-typelits       >= 0.1.4 && < 0.2
                      , generics-sop          >= 0.5.1 && < 0.6
-                     , template-haskell      >= 2.16.0 && < 2.17
+                     , template-haskell      >= 2.17.0 && < 2.18
                      , ghc-typelits-knownnat >= 0.7.6 && < 0.8,
 
   -- Directories containing source files.
