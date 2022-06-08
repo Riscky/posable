@@ -20,7 +20,7 @@ category:            Generics
 -- PVP summary:      +-+------- breaking API changes
 --                   | | +----- non-breaking API additions
 --                   | | | +--- code changes with no API change
-version:             0.10.0.0
+version:             1.0.0.0
 tested-with:         GHC >= 8.10
 
 license:             BSD-3-Clause
