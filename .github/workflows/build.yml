@@ -39,7 +39,7 @@ jobs:
 
     strategy:
       matrix:
-        ghc: ["8.8", "8.10", "9.0"]
+        ghc: ["8.6", "8.8", "8.10", "9.0", "9.2"]
 
     steps:
     - uses: actions/checkout@v2
@@ -70,4 +70,6 @@ jobs:
       run: "stack test"
 
     - name: "Generate documentation with Haddock"
+      # Haddock is broken for ghc 8.6
+      if: matrix.ghc != '8.6'
       run: "stack haddock posable"
