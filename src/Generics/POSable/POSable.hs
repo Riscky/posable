@@ -27,9 +27,8 @@ import           Data.Kind                       (Type)
 
 import qualified Generics.SOP                    as SOP
 
-import           GHC.Base                        (Nat)
-import           GHC.TypeLits                    (KnownNat, natVal, type (*),
-                                                  type (+))
+import           GHC.TypeLits                    (KnownNat, Nat, natVal,
+                                                  type (*), type (+))
 
 import           Data.Finite.Internal
 
