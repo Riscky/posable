@@ -1,21 +1,11 @@
 name: "Build & Test"
 on: [push, pull_request]
 jobs:
-  build:
+  lint:
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v2
-
-    - name: "Cache Stack files"
-      uses: actions/cache@v2.1.7
-      with:
-        path: |
-          .stack-work
-          ~/.local/bin/stylish-haskell
-        key: ${{ hashFiles('stack-*.yaml') }}
-        restore-keys: |
-          ${{ runner.os }}-stack
 
     - name: "Get stylish-haskell"
       run: "curl -L https://github.com/haskell/stylish-haskell/releases/download/v0.13.0.0/stylish-haskell-v0.13.0.0-linux-x86_64.tar.gz -o stylish-haskell.tar.gz"
@@ -44,8 +34,31 @@ jobs:
     - name: "Run hlint"
       run: "./hlint-3.3.6/hlint src test examples"
 
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        ghc: ["8.6", "8.8", "8.10", "9.0"]
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: "Cache Stack files"
+      uses: actions/cache@v2.1.7
+      with:
+        path: |
+          .stack-work
+          ~/.local/bin/stylish-haskell
+        key: ${{ hashFiles('stack-*.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-stack
+
     - name: "Install Stack"
       run: "sudo apt-get -y install haskell-stack"
+
+    - name: "link stack file"
+      run: "ln -s stack-${{ matrix.ghc }}.yaml stack.yaml"
 
     - name: "Install dependencies"
       run: "stack install"
