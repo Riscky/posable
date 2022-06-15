@@ -55,10 +55,10 @@ library
   -- other-extensions:
 
   -- Other library packages from which modules are imported.
-  build-depends:       base                  >= 4.13.0 && < 4.17
+  build-depends:       base                  >= 4.12.0 && < 4.17
                      , finite-typelits       >= 0.1.4  && < 0.2
                      , generics-sop          >= 0.4.0  && < 0.6
-                     , template-haskell      >= 2.15.0 && < 2.19
+                     , template-haskell      >= 2.13.0 && < 2.19
                      , ghc-typelits-knownnat >= 0.6    && < 0.8
 
   -- Directories containing source files.
