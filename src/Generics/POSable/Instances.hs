@@ -8,8 +8,8 @@
 -- This is needed to derive POSable for tuples of size more then 4
 {-# OPTIONS_GHC -fconstraint-solver-iterations=16 #-}
 
--- | This module contains instances of `POSable` for all Haskell prelude data types
---   as well as fixed size integers from Data.Int (`Int8`, `Int16`, `Int32` and `Int64`)
+-- | This module contains instances of `POSable` for all non-recursive prelude
+--   data types, like tuples, `Either` and `Maybe`
 module Generics.POSable.Instances (POSable) where
 
 import           Generics.POSable.POSable
@@ -17,7 +17,7 @@ import           Generics.POSable.Representation
 import           Language.Haskell.TH
 
 -----------------------------------------------------------------------
--- Instances for common nonrecursive Haskell datatypes
+-- Instances for non-recursive prelude data types
 deriving instance POSable Bool
 deriving instance POSable x => POSable (Maybe x)
 deriving instance (POSable l, POSable r) => POSable (Either l r)
