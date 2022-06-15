@@ -8,7 +8,6 @@
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 -- Larger types need more iterations
 {-# OPTIONS_GHC -fconstraint-solver-iterations=11 #-}
-{-# OPTIONS_GHC -ddump-splices #-}
 
 -- | Contains an example for deriving POSable for some datatype
 module Examples () where

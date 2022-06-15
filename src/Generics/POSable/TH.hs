@@ -1,9 +1,6 @@
 {-# LANGUAGE TemplateHaskell  #-}
 {-# LANGUAGE TypeApplications #-}
 
-
-{-# OPTIONS_GHC -ddump-splices #-}
-
 module Generics.POSable.TH (mkPOSableGround) where
 
 import           Generics.POSable.POSable
